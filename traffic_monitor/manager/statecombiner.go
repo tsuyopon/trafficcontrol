@@ -37,6 +37,9 @@ func StartStateCombiner(events health.ThreadsafeEvents, peerStates peer.CRStates
 
 	// the chan buffer just reduces the number of goroutines on our infinite buffer hack in combineState(), no real writer will block, since combineState() writes in a goroutine.
 	combineStateChan := make(chan struct{}, 1)
+	// 以下の無名関数は下記の処理を行います。
+	// 1. combineStateChanチャンネルに空の構造体(struct{}{})を送付します。
+	// 2. defaultの部分についてはcombineStateChanが満杯になった際にこちらの遷移に入ります。
 	combineState := func() {
 		select {
 		case combineStateChan <- struct{}{}:
@@ -46,6 +49,7 @@ func StartStateCombiner(events health.ThreadsafeEvents, peerStates peer.CRStates
 
 	go func() {
 		overrideMap := map[tc.CacheName]bool{}
+		// combineStateに格納されている無名関数中でcombineStateChanに値が格納されるまでこのgoroutineは待機します。
 		for range combineStateChan {
 			combineCrStates(events, true, peerStates.GetCRStatesPeersInfo(), localStates.Get(), combinedStates, overrideMap, toData.Get())
 		}
