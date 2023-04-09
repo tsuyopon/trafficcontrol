@@ -187,7 +187,7 @@ func poller(
 				usingIPv4 = !usingIPv4
 			}
 
-			<-pollFinishedChan
+			<-pollFinishedChan  // L184のgo handler.Handleの最後の引数に指定したchannelで処理が終わると、送信されるので、ここの受信のwaitが解除される。
 		case <-die:
 			tick.Stop()  // Poll()の「go func() { killChan <- struct{}{} }()」はここを実行させるためのもの
 			return
