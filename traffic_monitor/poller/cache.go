@@ -154,6 +154,7 @@ func poller(
 	for {
 		select {
 		case <-tick.C:
+			// /_atstatエンドポイントへのリクエストが行われる。
 			if (usingIPv4 && url == "") || (!usingIPv4 && url6 == "") {
 				usingIPv4 = !usingIPv4
 				continue
@@ -188,12 +189,13 @@ func poller(
 
 			<-pollFinishedChan
 		case <-die:
-			tick.Stop()
+			tick.Stop()  // Poll()の「go func() { killChan <- struct{}{} }()」はここを実行させるためのもの
 			return
 		}
 	}
 }
 
+// 新・旧の設定オブジェクトを比較して、新に旧のURLがなければdeletionsにappendする。逆に旧に新のURLがなければadditionsにappendする。
 // diffConfigs takes the old and new configs, and returns a list of deleted IDs, and a list of new polls to do
 func diffConfigs(old CachePollerConfig, new CachePollerConfig) ([]string, []CachePollInfo) {
 	deletions := []string{}
