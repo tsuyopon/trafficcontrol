@@ -49,7 +49,9 @@ func StartStateCombiner(events health.ThreadsafeEvents, peerStates peer.CRStates
 
 	go func() {
 		overrideMap := map[tc.CacheName]bool{}
-		// combineStateに格納されている無名関数中でcombineStateChanに値が格納されるまでこのgoroutineは待機します。
+		// combineStateに格納されている無名関数中でcombineStateChanに値が追加されると、このfor range中のcombineCrStatesが実行されます。
+		// それまではまるで無限ループのように待機します。
+		// なおcombineStateChanチャネルがcloseされた場合には、for rangeのループ処理が閉じられることになります。
 		for range combineStateChan {
 			combineCrStates(events, true, peerStates.GetCRStatesPeersInfo(), localStates.Get(), combinedStates, overrideMap, toData.Get())
 		}
