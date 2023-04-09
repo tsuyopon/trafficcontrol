@@ -89,7 +89,10 @@ type CachePollInfo struct {
 	PollConfig
 }
 
+
 func (p CachePoller) Poll() {
+	// killChans配列ですが、range addtionsの中でこの配列にチャネルを新規登録し、その後の処理でgo pollerに引き渡して、キャンセル用チャネルとして利用されます。
+	// なお、range deletionsの中ではdiffConfigsでdeletionsと判定された特定のidからkillChans配列から取得してkillChanに格納して、キャンセル用として送信しています。
 	killChans := map[string]chan<- struct{}{}
 	for newConfig := range p.ConfigChannel {
 		deletions, additions := diffConfigs(p.Config, newConfig)
