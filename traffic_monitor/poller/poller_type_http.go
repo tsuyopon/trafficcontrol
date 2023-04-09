@@ -94,6 +94,7 @@ type HTTPPollCtx struct {
 	FormatAccept string
 }
 
+// memo: http://<IP>:80/_atstats?application=system&inf.name=eth0 へのアクセスはここを経由する。
 func httpPoll(ctxI interface{}, url string, host string, pollID uint64) ([]byte, time.Time, time.Duration, error) {
 	ctx := (ctxI).(*HTTPPollCtx)
 	req, err := http.NewRequest("GET", url, nil)
