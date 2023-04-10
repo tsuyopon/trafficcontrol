@@ -29,12 +29,12 @@ maybe_debug() {
 	shift
 	hostname="${hostname//-/_}" # replace - with _
 	hostname="${hostname^^}" # uppercase
-	debug_variable_name="T3C_DEBUG_COMPONENT_${hostname}"
-	if [[ "${!debug_variable_name}" == "${actual_binary%.actual}" ]]; then
-		command=(dlv --listen=":${debug_port}" --headless=true --api-version=2 exec "/usr/bin/${actual_binary}" --)
-	else
+#	debug_variable_name="T3C_DEBUG_COMPONENT_${hostname}"
+#	if [[ "${!debug_variable_name}" == "${actual_binary%.actual}" ]]; then
+#		command=(dlv --listen=":${debug_port}" --headless=true --api-version=2 exec "/usr/bin/${actual_binary}" --)
+#	else
 		command=("$actual_binary")
-	fi
+#	fi
 	exec "${command[@]}" "$@"
 }
 
