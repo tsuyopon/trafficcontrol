@@ -81,6 +81,9 @@ func GetServerUpdateStatus(cfg TCCfg) (*atscfg.ServerUpdateStatus, error) {
 
 func WriteData(cfg TCCfg) error {
 	log.Infoln("Getting data '" + cfg.GetData + "'")
+
+	// 「GetDataFuncs()」はL63で定義される「map[string]func(TCCfg, io.Writer) error」型を返します。
+	// その後、「GetDataFuncs()[cfg.GetData]」として解釈されます。GetDataFuncs()で定義されている関数がcfg.GetDataの値によって呼び出されます。
 	dataF, ok := GetDataFuncs()[cfg.GetData]
 	if !ok {
 		return errors.New("unknown data request '" + cfg.GetData + "'")
