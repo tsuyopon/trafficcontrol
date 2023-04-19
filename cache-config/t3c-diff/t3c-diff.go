@@ -109,14 +109,20 @@ func main() {
 	fileB = strings.Join(fileBLines, "\n")
 	fileB = t3cutil.NewLineFilter(fileB)
 
+	// fileAとfileBで２つの内容が異なる場合には差分を計算します。
 	if fileA != fileB {
+		// 先頭文字列が「+」や「-」で始まる値を抽出します。
 		match := regexp.MustCompile(`(?m)^\+.*|^-.*`)
 		changes := diff.Diff(fileA, fileB)
+
+		// 先ほどのdiffを抽出したchangesに対して追加(+)、削除(-)があれば出力させます。
 		for _, change := range match.FindAllString(changes, -1) {
 			fmt.Println(change)
 		}
 		os.Exit(1)
 	}
+
+	// fileAとfileBが両方存在しない場合には終了します。
 	if fileAExisted != fileBExisted {
 		os.Exit(1)
 	}

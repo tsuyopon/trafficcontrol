@@ -68,6 +68,7 @@ func GetRetry(numRetries int, objName string, obj interface{}, getter func(obj i
 	start := time.Now()
 	currentRetry := 0
 	for {
+		// ここでのgetterはGetRetry関数呼び出し時に第4引数にて無名関数が設定されているのでその関数が実行される事になる。
 		err := getter(obj)
 		if err == nil {
 			break
