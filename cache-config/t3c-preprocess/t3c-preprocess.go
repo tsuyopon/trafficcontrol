@@ -50,7 +50,11 @@ var GitRevision = "nogit"
 
 var returnRegex = regexp.MustCompile(`\s*__RETURN__\s*`)
 
+// この関数では下記の文字列を置換します。
+// __SERVER_TCP_PORT__, __CACHE_IPV4__, __HOSTNAME__, __FULL_HOSTNAME__, __CACHEGROUP__, __RETURN__
 func PreprocessConfigFile(server *atscfg.Server, cfgFile string) string {
+
+	// __SERVER_TCP_PORT__の置換
 	if server.TCPPort != nil && *server.TCPPort != 80 && *server.TCPPort != 0 {
 		cfgFile = strings.Replace(cfgFile, `__SERVER_TCP_PORT__`, strconv.Itoa(*server.TCPPort), -1)
 	} else {
@@ -79,33 +83,43 @@ func PreprocessConfigFile(server *atscfg.Server, cfgFile string) string {
 			break
 		}
 	}
+
+	// __CACHE_IPV4__の置換
 	if ipAddr != "" {
 		cfgFile = strings.Replace(cfgFile, `__CACHE_IPV4__`, ipAddr, -1)
 	} else {
 		log.Errorln("Preprocessing: this server had a missing or malformed IPv4 Service Interface, cannot replace __CACHE_IPV4__ directives!")
 	}
 
+	// __HOSTNAME__の置換
 	if server.HostName == nil || *server.HostName == "" {
 		log.Errorln("Preprocessing: this server missing HostName, cannot replace __HOSTNAME__ directives!")
 	} else {
 		cfgFile = strings.Replace(cfgFile, `__HOSTNAME__`, *server.HostName, -1)
 	}
+
+	// __FULL_HOSTNAME__の置換
 	if server.HostName == nil || *server.HostName == "" || server.DomainName == nil || *server.DomainName == "" {
 		log.Errorln("Preprocessing: this server missing HostName or DomainName, cannot replace __FULL_HOSTNAME__ directives!")
 	} else {
 		cfgFile = strings.Replace(cfgFile, `__FULL_HOSTNAME__`, *server.HostName+`.`+*server.DomainName, -1)
 	}
+
+	// __CACHEGROUP__の置換
 	if server.Cachegroup != nil && *server.Cachegroup != "" {
 		cfgFile = strings.Replace(cfgFile, `__CACHEGROUP__`, *server.Cachegroup, -1)
 	} else {
 		log.Errorln("Preprocessing: this server missing Cachegroup, cannot replace __CACHEGROUP__ directives!")
 	}
 
+	// __RETURN__の置換
 	cfgFile = returnRegex.ReplaceAllString(cfgFile, "\n")
 	return cfgFile
 }
 
 func main() {
+
+	// オプション関連の取得
 	flagHelp := getopt.BoolLong("help", 'h', "Print usage information and exit")
 	flagVersion := getopt.BoolLong("version", 'V', "Print version information and exit.")
 	flagVerbose := getopt.CounterLong("verbose", 'v', `Log verbosity. Logging is output to stderr. By default, errors are logged. To log warnings, pass '-v'. To log info, pass '-vv'. To omit error logging, see '-s'`)
@@ -120,6 +134,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	// ログ周りの設定
 	logErr := io.WriteCloser(os.Stderr)
 	logWarn := io.WriteCloser(nil)
 	logInf := io.WriteCloser(nil)
@@ -139,14 +154,17 @@ func main() {
 
 	// TODO read log location arguments
 	dataFiles := &DataAndFiles{}
+
+	// 標準入力から受け取って、その結果をdataFilesに格納する
 	if err := json.NewDecoder(os.Stdin).Decode(dataFiles); err != nil {
 		log.Errorln("Error reading json input")
 	}
 
 	for fileI, file := range dataFiles.Files {
-		txt := PreprocessConfigFile(dataFiles.Data.Server, file.Text)
+		txt := PreprocessConfigFile(dataFiles.Data.Server, file.Text) // __XXXX__の置換によるpreprocess処理を行う
 		dataFiles.Files[fileI].Text = txt
 	}
+
 	sort.Sort(t3cutil.ATSConfigFiles(dataFiles.Files))
 	if err := util.WriteConfigs(dataFiles.Files, os.Stdout); err != nil {
 		hostName := ""

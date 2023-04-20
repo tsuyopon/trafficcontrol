@@ -107,6 +107,7 @@ func generate(cfg config.Cfg) ([]t3cutil.ATSConfigFile, error) {
 }
 
 // preprocess takes the to Data from 't3c-request --get-data=config' and the generated files from 't3c-generate', passes them to `t3c-preprocess`, and returns the result.
+// t3c-preprocessは「t3c-request --get-data=config」や「t3c-generate」で生成された値を標準入力で受け付けます。
 func preprocess(cfg config.Cfg, configData []byte, generatedFiles []byte) ([]byte, error) {
 	args := []string{}
 
@@ -120,12 +121,14 @@ func preprocess(cfg config.Cfg, configData []byte, generatedFiles []byte) ([]byt
 		args = append(args, "-v")
 	}
 
+	// t3c-preprocessを実行します
 	cmd := exec.Command(`t3c-preprocess`, args...)
 	outbuf := bytes.Buffer{}
 	errbuf := bytes.Buffer{}
 	cmd.Stdout = &outbuf
 	cmd.Stderr = &errbuf
 
+	// StdinPipeを使うとコマンドに標準入力を渡します
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, errors.New("getting command pipe: " + err.Error())
@@ -135,6 +138,7 @@ func preprocess(cfg config.Cfg, configData []byte, generatedFiles []byte) ([]byt
 		return nil, errors.New("starting command: " + err.Error())
 	}
 
+	// t3c-preprocessに標準入力で渡す文字列は下記で書き込みを行います。
 	if _, err := stdinPipe.Write([]byte(`{"data":`)); err != nil {
 		return nil, errors.New("writing opening json to input: " + err.Error())
 	} else if _, err := stdinPipe.Write(configData); err != nil {

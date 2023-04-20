@@ -111,7 +111,8 @@ func main() {
 
 	// fileAとfileBで２つの内容が異なる場合には差分を計算します。
 	if fileA != fileB {
-		// 先頭文字列が「+」や「-」で始まる値を抽出します。
+
+		// 先頭文字列が「+」や「-」で始まる値を抽出します。(diffコマンドでの差分はこのフォーマット)
 		match := regexp.MustCompile(`(?m)^\+.*|^-.*`)
 		changes := diff.Diff(fileA, fileB)
 
@@ -126,6 +127,8 @@ func main() {
 	if fileAExisted != fileBExisted {
 		os.Exit(1)
 	}
+
+	// ファイルがstdinでなければpermissionチェックとownerチェックを行います。
 	switch {
 	case fileNameA != "stdin":
 		if t3cutil.PermCk(fileNameA, *mode) {

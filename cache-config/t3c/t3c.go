@@ -82,16 +82,20 @@ func main() {
 		os.Exit(ExitCodeUnknownCommand)
 	}
 
+	// t3c-xxxxコマンドを呼び出すことがわかる。つまり、t3c.goはwrapperプログラムであることがわかる。
 	app := "t3c-" + cmd
 
+	// コマンドがあるかどうかをチェックする
 	appPath, err := exec.LookPath(app)
 	if err != nil {
 		log.Errorf("error finding path to '%s': %s\n", app, err.Error())
 		os.Exit(ExitCodeCommandLookupErr)
 	}
 
+	// 2番目以降の引数はそのまま指定させる
 	args := append([]string{app}, os.Args[2:]...)
 
+	// OS環境変数を引き継がせるために取得する
 	env := os.Environ()
 
 	if err := syscall.Exec(appPath, args, env); err != nil {
