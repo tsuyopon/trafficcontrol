@@ -109,12 +109,14 @@ type ChangedCfg struct {
 }
 
 // ExitRestart returns the "needs restart" message and exits.
+// 呼び出し側ではこの戻り値で返される関数が実行される
 func ExitRestart() {
 	fmt.Fprintf(os.Stdout, t3cutil.ServiceNeedsRestart.String()+"\n")
 	os.Exit(0)
 }
 
 // ExitReload returns the "needs reload" message and exits.
+// 呼び出し側ではこの戻り値で返される関数が実行される
 func ExitReload() {
 	fmt.Fprintf(os.Stdout, t3cutil.ServiceNeedsReload.String()+"\n")
 	os.Exit(0)

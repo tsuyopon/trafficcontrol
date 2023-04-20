@@ -54,10 +54,10 @@ const (
 )
 
 func runSysctl(cfg config.Cfg) {
-	if cfg.ReportOnly {
+	if cfg.ReportOnly {  //  --report-only=true
 		return
 	}
-	if cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {
+	if cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {  // --service-action=restart
 		_, rc, err := util.ExecCommand("/usr/sbin/sysctl", "-p")
 		if err != nil {
 			log.Errorln("sysctl -p failed")
@@ -86,6 +86,8 @@ func main() {
 func Main() int {
 	var syncdsUpdate torequest.UpdateStatus
 	var lock util.FileLock
+
+	// t3c-applyコマンドに指定されたオプションの解析処理を行います
 	cfg, err := config.GetCfg(Version, GitRevision)
 	if err != nil {
 		fmt.Println(err)
@@ -95,6 +97,7 @@ func Main() int {
 		return ExitCodeSuccess
 	}
 
+	// /var/run/t3c.lockがあるかどうかでロックされているかをチェックします。
 	log.Infoln("Trying to acquire app lock")
 	for lockStart := time.Now(); !lock.GetLock(LockFilePath); {
 		if time.Since(lockStart) > LockFileRetryTimeout {
@@ -106,7 +109,9 @@ func Main() int {
 	}
 	log.Infoln("Acquired app lock")
 
+	// git=yが指定されている場合
 	if cfg.UseGit == config.UseGitYes {
+		// gitレポジトリがなければ生成する
 		err := util.EnsureConfigDirIsGitRepo(cfg)
 		if err != nil {
 			log.Errorln("Ensuring config directory '" + cfg.TsConfigDir + "' is a git repo - config may not be a git repo! " + err.Error())
@@ -120,6 +125,7 @@ func Main() int {
 	if cfg.UseGit == config.UseGitYes || cfg.UseGit == config.UseGitAuto {
 		// commit anything someone else changed when we weren't looking,
 		// with a keyword indicating it wasn't our change
+		// 誰かが変更したものについては、このプログラムのcommitでないコメントを指定してcommitする
 		if err := util.MakeGitCommitAll(cfg, util.GitChangeNotSelf, true); err != nil {
 			log.Errorln("git committing existing changes, dir '" + cfg.TsConfigDir + "': " + err.Error())
 		}
@@ -128,7 +134,7 @@ func Main() int {
 	trops := torequest.NewTrafficOpsReq(cfg)
 
 	// if doing os checks, insure there is a 'systemctl' or 'service' and 'chkconfig' commands.
-	if !cfg.SkipOSCheck && cfg.SvcManagement == config.Unknown {
+	if !cfg.SkipOSCheck && cfg.SvcManagement == config.Unknown { // --skip-os-check=false かつ /bin/shの実行結果がSystemDやSystemVいずれでもないと判断した場合
 		log.Errorln("OS checks are enabled and unable to find any know service management tools.")
 	}
 
@@ -145,6 +151,7 @@ func Main() int {
 
 	log.Infoln(time.Now().Format(time.RFC3339))
 
+	// 実行プロセスがrootユーザーであることのチェックを行う(restartやreloadが必要となるため)
 	if !util.CheckUser(cfg) {
 
 		lock.Unlock()
@@ -153,7 +160,7 @@ func Main() int {
 
 	// if running in Revalidate mode, check to see if it's
 	// necessary to continue
-	if cfg.Files == t3cutil.ApplyFilesFlagReval {
+	if cfg.Files == t3cutil.ApplyFilesFlagReval { // --files=reval
 		syncdsUpdate, err = trops.CheckRevalidateState(false)
 
 		if err != nil {
@@ -166,16 +173,18 @@ func Main() int {
 		}
 
 	} else {
+		// 下記ではTrafficOpsからステータスを取得した後に、その結果がPendingステータスの場合に再度ステータスを取得するために(t3c-request)が実行される
 		syncdsUpdate, err = trops.CheckSyncDSState()
 		if err != nil {
 			log.Errorln("Checking syncds state: " + err.Error())
 			return GitCommitAndExit(ExitCodeSyncDSError, FailureExitMsg, cfg)
 		}
-		if !cfg.IgnoreUpdateFlag && cfg.Files == t3cutil.ApplyFilesFlagAll && syncdsUpdate == torequest.UpdateTropsNotNeeded {
+		if !cfg.IgnoreUpdateFlag && cfg.Files == t3cutil.ApplyFilesFlagAll && syncdsUpdate == torequest.UpdateTropsNotNeeded { // --ignore-update-flag=false --files=all + UpdateTropsNotNeeded
 			// If touching remap.config fails, we want to still try to restart services
 			// But log a critical-post-config-failure, which needs logged right before exit.
 			postConfigFail := false
 			// check for maxmind db updates even if we have no other updates
+			// オプションでmaxmind-locationのURLが指定されている場合には下記で処理が実行される
 			if CheckMaxmindUpdate(cfg) {
 				// We updated the db so we should touch and reload
 				trops.RemapConfigReload = true
@@ -200,11 +209,13 @@ func Main() int {
 		}
 	}
 
-	if cfg.Files != t3cutil.ApplyFilesFlagAll {
+	if cfg.Files != t3cutil.ApplyFilesFlagAll { // --files=all 以外である場合
 		// make sure we got the data necessary to check packages
 		log.Infoln("======== Didn't get all files, no package processing needed or possible ========")
 	} else {
 		log.Infoln("======== Start processing packages  ========")
+
+		// TrafficOpsからサーバにインストールが必要なリストを取得して、パッケージのyum remove, yum installを実施する。
 		err = trops.ProcessPackages()
 		if err != nil {
 			log.Errorf("Error processing packages: %s\n", err)
@@ -212,6 +223,7 @@ func Main() int {
 		}
 
 		// check and make sure packages are enabled for startup
+		// t3c-request --get-data=chkconfigで取得した値を元にして必要なサービスを有効にします。
 		err = trops.CheckSystemServices()
 		if err != nil {
 			log.Errorf("Error verifying system services: %s\n", err.Error())
@@ -225,6 +237,8 @@ func Main() int {
 		log.Errorf("Getting config file list: %s\n", err)
 		return GitCommitAndExit(ExitCodeConfigFilesError, FailureExitMsg, cfg)
 	}
+
+
 	syncdsUpdate, err = trops.ProcessConfigFiles()
 	if err != nil {
 		log.Errorf("Error while processing config files: %s\n", err.Error())
@@ -236,7 +250,9 @@ func Main() int {
 		trops.RemapConfigReload = true
 	}
 
+	// trops.RemapConfigReloadのフラグはこの上の直前でセットされる
 	if trops.RemapConfigReload == true {
+		// remap.configをtouchする(強制的に時刻を更新している?)
 		cfg, ok := trops.GetConfigFile("remap.config")
 		_, rc, err := util.ExecCommand("/usr/bin/touch", cfg.Path)
 		if err != nil {
@@ -252,6 +268,7 @@ func Main() int {
 	}
 
 	// start 'teakd' if installed.
+	// このパッケージが見当たらない(謎)。
 	if trops.IsPackageInstalled("teakd") {
 		svcStatus, pid, err := util.GetServiceStatus("teakd")
 		if err != nil {
@@ -316,6 +333,7 @@ func CheckMaxmindUpdate(cfg config.Cfg) bool {
 	// If we do, test if the file exists, do IMS based on disk time
 	// and download and unpack as needed
 	result := false
+	// --maxmind-locationオプションにURLが指定されている場合。このオプションにはgzipで圧縮されたmaxminddbへのURLのパスが指定される。そのdbはtrafficserverのetcにインストールされる。
 	if cfg.MaxMindLocation != "" {
 		// Check if the maxmind db needs to be updated before reload
 		result = util.UpdateMaxmind(cfg)

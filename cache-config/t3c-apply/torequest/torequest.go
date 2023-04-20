@@ -522,10 +522,10 @@ func (r *TrafficOpsReq) replaceCfgFile(cfg *ConfigFile) (*FileRestartData, error
 // CheckSystemServices is used to verify that packages installed
 // are enabled for startup.
 func (r *TrafficOpsReq) CheckSystemServices() error {
-	if r.Cfg.ServiceAction != t3cutil.ApplyServiceActionFlagRestart {
+	if r.Cfg.ServiceAction != t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart ではない場合
 		return nil
 	}
-	result, err := getChkconfig(r.Cfg)
+	result, err := getChkconfig(r.Cfg) // t3c-request --get-data=chkconfig
 	if err != nil {
 		log.Errorln(err)
 		return err
@@ -546,6 +546,9 @@ func (r *TrafficOpsReq) CheckSystemServices() error {
 		if !enabled {
 			continue
 		}
+
+		// SystemDかSystemVかでsystemctlかchkconfigかのコマンドを分離する。
+		// systemctl enable <pkg> や chkconfig --level <level> <pkg> onのサービス開始コマンドを実行する
 		if r.Cfg.SvcManagement == config.SystemD {
 			out, rc, err := util.ExecCommand("/bin/systemctl", "enable", name)
 			if err != nil {
@@ -677,7 +680,7 @@ func (r *TrafficOpsReq) PrintWarnings() {
 func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, error) {
 	log.Infoln("Checking revalidate state.")
 	if !sleepOverride &&
-		(r.Cfg.ReportOnly || r.Cfg.Files != t3cutil.ApplyFilesFlagReval) {
+		(r.Cfg.ReportOnly || r.Cfg.Files != t3cutil.ApplyFilesFlagReval) { // --report-only=true または 「--files=reval以外」
 		updateStatus := UpdateTropsNotNeeded
 		log.Infof("CheckRevalidateState returning %v\n", updateStatus)
 		return updateStatus, nil
@@ -726,12 +729,13 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 }
 
 // CheckSYncDSState retrieves and returns the DS Update status from Traffic Ops.
+// 「--files=reval」の場合にはこのロジックのif文のメイン処理は通らないので「--files=all」の時だけだと思われる。
 func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 	updateStatus := UpdateTropsNotNeeded
 	randDispSec := time.Duration(0)
 	log.Debugln("Checking syncds state.")
 	//	if r.Cfg.RunMode == t3cutil.ModeSyncDS || r.Cfg.RunMode == t3cutil.ModeBadAss || r.Cfg.RunMode == t3cutil.ModeReport {
-	if r.Cfg.Files != t3cutil.ApplyFilesFlagReval {
+	if r.Cfg.Files != t3cutil.ApplyFilesFlagReval { // 「--files=revalでない値」が指定された場合
 		serverStatus, err := getUpdateStatus(r.Cfg)
 		if err != nil {
 			log.Errorln("getting '" + r.Cfg.CacheHostName + "' update status: " + err.Error())
@@ -742,9 +746,11 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			updateStatus = UpdateTropsNeeded
 			log.Errorln("Traffic Ops is signaling that an update is waiting to be applied")
 
+			// 取得したレスポンスで 「parent_pending=true」 かつ 「--wait-for-parents=true」 であればparentが更新されたことを待つ
 			if serverStatus.ParentPending && r.Cfg.WaitForParents {
 				log.Errorln("Traffic Ops is signaling that my parents need an update.")
 				// TODO should reval really not sleep?
+				// 「--report-only=false」 かつ 「--files=revalでない値」 が指定された場合
 				if !r.Cfg.ReportOnly && r.Cfg.Files != t3cutil.ApplyFilesFlagReval {
 					log.Infof("sleeping for %ds to see if the update my parents need is cleared.", randDispSec/time.Second)
 					serverStatus, err = getUpdateStatus(r.Cfg)
@@ -761,7 +767,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			} else {
 				log.Debugf("Processing with update: Traffic Ops server status %+v config wait-for-parents %+v", serverStatus, r.Cfg.WaitForParents)
 			}
-		} else if !r.Cfg.IgnoreUpdateFlag {
+		} else if !r.Cfg.IgnoreUpdateFlag { // --ignore-update-flag=false
 			log.Errorln("no queued update needs to be applied.  Running revalidation before exiting.")
 			r.RevalidateWhileSleeping()
 			return UpdateTropsNotNeeded, nil
@@ -878,7 +884,7 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 // and determines which need to be installed or removed on the cache.
 func (r *TrafficOpsReq) ProcessPackages() error {
 	log.Infoln("Calling ProcessPackages")
-	// get the package list for this cache from Traffic Ops.
+	// get the package list for this cache from Traffic Ops. (t3c-request --get-data=packagesの実行してTrafficOpsからこのサーバで取得するパッケージリストを取得する)
 	pkgs, err := getPackages(r.Cfg)
 	if err != nil {
 		return errors.New("getting packages: " + err.Error())
@@ -972,7 +978,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 
 		if len(install) > 0 {
 			for ii := range install {
-				result, err := util.PackageAction("info", install[ii])
+				result, err := util.PackageAction("info", install[ii])    // 指定されたパッケージのyum infoを実施する
 				if err != nil || result != true {
 					return errors.New("Package " + install[ii] + " is not available to install: " + err.Error())
 				}
@@ -980,10 +986,10 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 			log.Infoln("All packages available.. proceding..")
 
 			// uninstall packages marked for removal
-			if len(install) > 0 && r.Cfg.InstallPackages {
+			if len(install) > 0 && r.Cfg.InstallPackages {  // --install-packages=trueの場合
 				for jj := range uninstall {
 					log.Infof("Uninstalling %s\n", uninstall[jj])
-					r, err := util.PackageAction("remove", uninstall[jj])
+					r, err := util.PackageAction("remove", uninstall[jj]) // 指定されたパッケージのyum removeを実施する
 					if err != nil {
 						return errors.New("Unable to uninstall " + uninstall[jj] + " : " + err.Error())
 					} else if r == true {
@@ -995,7 +1001,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 				for jj := range install {
 					pkg := install[jj]
 					log.Infof("Installing %s\n", pkg)
-					result, err := util.PackageAction("install", pkg)
+					result, err := util.PackageAction("install", pkg)  // 指定されたパッケージのyum installを実施する
 					if err != nil {
 						return errors.New("Unable to install " + pkg + " : " + err.Error())
 					} else if result == true {
@@ -1006,6 +1012,8 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 				}
 			}
 		}
+
+		// --report-only=trueの場合には、インストール対象を表示だけして終了する
 		if r.Cfg.ReportOnly && len(install) > 0 {
 			for ii := range install {
 				log.Errorf("\nIn Report mode and %s needs installation.\n", install[ii])
@@ -1165,11 +1173,12 @@ func (r *TrafficOpsReq) UpdateTrafficOps(syncdsUpdate *UpdateStatus) error {
 	}
 
 	// TODO: The boolean flags/representation can be removed after ATC (v7.0+)
+	// sendUpdateの中でTrafficOpsに対してserverStatusの更新処理を行う(実際にはt3c-updateが実行される)
 	if !r.Cfg.ReportOnly && !r.Cfg.NoUnsetUpdateFlag {
-		if r.Cfg.Files == t3cutil.ApplyFilesFlagAll {
+		if r.Cfg.Files == t3cutil.ApplyFilesFlagAll { // --files=all
 			b := false
 			err = sendUpdate(r.Cfg, serverStatus.ConfigUpdateTime, nil, &b, nil)
-		} else if r.Cfg.Files == t3cutil.ApplyFilesFlagReval {
+		} else if r.Cfg.Files == t3cutil.ApplyFilesFlagReval { // --files=reval
 			b := false
 			err = sendUpdate(r.Cfg, nil, serverStatus.RevalidateUpdateTime, nil, &b)
 		}

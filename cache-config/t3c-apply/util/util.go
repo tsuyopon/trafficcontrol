@@ -251,7 +251,7 @@ func PackageInfo(cmdstr string, name string) ([]string, error) {
 	var result []string
 	switch cmdstr {
 	case "cfg-files": // returns a list of the package configuration files.
-		output, rc, err := ExecCommand("/bin/rpm", "-q", "-c", name)
+		output, rc, err := ExecCommand("/bin/rpm", "-q", "-c", name)  // rpm -q -c <package>の実行
 		if rc == 1 { // rpm package for 'name' was not found.
 			return nil, nil
 		} else if rc == 0 { // add the package name the file belongs to.
@@ -265,7 +265,7 @@ func PackageInfo(cmdstr string, name string) ([]string, error) {
 			return nil, err
 		}
 	case "file-query": // returns the rpm name that owns the file 'name'
-		output, rc, err := ExecCommand("/bin/rpm", "-q", "-f", name)
+		output, rc, err := ExecCommand("/bin/rpm", "-q", "-f", name) // rpm -q -f <package>の実行
 		if rc == 1 { // file is not part of any package.
 			return nil, nil
 		} else if rc == 0 { // add the package name the file belongs to.
@@ -276,7 +276,7 @@ func PackageInfo(cmdstr string, name string) ([]string, error) {
 			return nil, err
 		}
 	case "pkg-provides": // returns the package name that provides 'name'
-		output, rc, err := ExecCommand("/bin/rpm", "-q", "--whatprovides", name)
+		output, rc, err := ExecCommand("/bin/rpm", "-q", "--whatprovides", name) // rpm -q --whatproveds <package>の実行
 		log.Debugf("pkg-provides - name: %s, output: %s\n", name, output)
 		if rc == 1 { // no package provides 'name'
 			return nil, nil
@@ -289,16 +289,16 @@ func PackageInfo(cmdstr string, name string) ([]string, error) {
 			return nil, errors.New("rpm -q --whatprovides '" + name + "' returned: " + err.Error())
 		}
 	case "pkg-query": // returns the package name for 'name'.
-		output, rc, err := ExecCommand("/bin/rpm", "-q", name)
+		output, rc, err := ExecCommand("/bin/rpm", "-q", name) // rpm -q <package>
 		if rc == 1 { // the package is not installed.
 			return nil, nil
 		} else if rc == 0 { // add the rpm name
-			result = append(result, string(strings.TrimSpace(string(output))))
+			result = append(result, string(strings.TrimSpace(string(output)))) // 正常に終了したら(rf=0)、rpmをresultに突っ込む
 		} else if err != nil {
 			return nil, errors.New("rpm -q '" + name + "' returned: " + err.Error())
 		}
 	case "pkg-requires": // returns a list of packages that requires package 'name'
-		output, rc, err := ExecCommand("/bin/rpm", "-q", "--whatrequires", name)
+		output, rc, err := ExecCommand("/bin/rpm", "-q", "--whatrequires", name)  // rpm -q --whatrequires <package>
 		if rc == 1 { // no package reuires package 'name'
 			return nil, nil
 		} else if rc == 0 {
@@ -449,6 +449,7 @@ func Touch(fn string) error {
 
 func UpdateMaxmind(cfg config.Cfg) bool {
 
+	// --maxmind-locationのオプションが空ならなにもしない
 	if cfg.MaxMindLocation == "" {
 		return false
 	}
@@ -460,6 +461,7 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 	}
 
 	// Split url, get filename
+	// --maxmind-locationにはmaxminddbがgzipされたURLパスが含まれる
 	url, err := url.Parse(cfg.MaxMindLocation)
 	if err != nil {
 		log.Errorf("error parsing maxmind url: %v", err)
@@ -468,12 +470,13 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 	urlpath := url.Path
 	fileName := path.Base(urlpath)
 
+	// 指定されたファイル名が不正の場合
 	if fileName == "." || fileName == "/" {
 		log.Errorf("filename for maxmind from url invalid: %s", fileName)
 		return false
 	}
 
-	// Check if filename exists in ats etc
+	// Check if filename exists in ats etc  trafficserverの設定ディレクトリ上に同名のファイルが存在するかどうかをチェックする
 	filePath := filepath.Join(cfg.TsConfigDir, "/", fileName)
 	stdOut, _, code := t3cutil.Do(`date`,
 		"+%a, %d %b %Y %T %Z",
@@ -484,7 +487,7 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 	// Do a HEAD request to check for 200 or 304 depending on if we
 	// have an existing file or not.
 	client := &http.Client{}
-	req, err := http.NewRequest("HEAD", cfg.MaxMindLocation, nil)
+	req, err := http.NewRequest("HEAD", cfg.MaxMindLocation, nil) // HEADリクエスト
 	if err != nil {
 		log.Errorf("error creating head request %v", err)
 		return false
@@ -493,12 +496,13 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 	if code == 0 {
 		req.Header.Add("If-Modified-Since", strings.TrimSpace(string(stdOut)))
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // --maxmind-locationに指定されたmaxinddbのgzipされたファイルを取得するためのURLにHEADリクエストする
 	if err != nil {
 		log.Errorf("error issuing client IMS request %v", err)
 		return false
 	}
 
+	// 200でも304でもない場合にはエラー
 	if resp.StatusCode != 304 && resp.StatusCode != 200 {
 		log.Errorf("error requesting %s, code: %d", cfg.MaxMindLocation, resp.StatusCode)
 		return false
@@ -524,6 +528,7 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 		return false
 	}
 
+	// curlコマンドでmaxmind dbにアクセスし、指定したtrafficserverの設定ファイルパスに保存する様に指示する
 	_, _, code = t3cutil.Do(`curl`,
 		"-so",
 		filePath,
@@ -534,12 +539,15 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 		return false
 	}
 
+	// gzipを実行する。gzipしたファイルはgzを削除して、.tmpを付与する
 	gunzip := exec.Command("bash", "-c", "gunzip < "+filePath+" > "+(strings.TrimSuffix(filePath, ".gz"))+".tmp")
 	err = gunzip.Run()
 	if err != nil {
 		log.Errorf("error running gunzip: %v\n", err)
 		return false
 	}
+
+	// 上で保存した.tmpを正規のパスに保存する
 	move := exec.Command("bash", "-c", "mv "+(strings.TrimSuffix(filePath, ".gz")+".tmp")+" "+strings.TrimSuffix(filePath, ".gz"))
 	err = move.Run()
 	if err != nil {

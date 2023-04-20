@@ -185,6 +185,7 @@ func getStatuses(cfg config.Cfg) ([]string, error) {
 
 func getChkconfig(cfg config.Cfg) ([]map[string]string, error) {
 	result := []map[string]string{}
+	// t3c-request --get-data=chkconfigが実行される
 	if err := requestJSON(cfg, "chkconfig", &result); err != nil {
 		return nil, errors.New("requesting json: " + err.Error())
 	}
@@ -209,6 +210,7 @@ func getSystemInfo(cfg config.Cfg) (map[string]interface{}, error) {
 
 func getPackages(cfg config.Cfg) ([]Package, error) {
 	pkgs := []Package{}
+	// t3c-request --get-data=packages ... を実行する
 	if err := requestJSON(cfg, "packages", &pkgs); err != nil {
 		return nil, errors.New("requesting json: " + err.Error())
 	}

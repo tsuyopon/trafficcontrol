@@ -32,6 +32,8 @@ import (
 	"github.com/apache/trafficcontrol/cache-config/t3c-apply/config"
 )
 
+// git statusの出力が何もなければgitレポジトリが存在しないものとして新規作成する関数
+// git statusの出力があれば何もしない
 func EnsureConfigDirIsGitRepo(cfg config.Cfg) error {
 	cmd := exec.Command("git", "status")
 	cmd.Dir = cfg.TsConfigDir
