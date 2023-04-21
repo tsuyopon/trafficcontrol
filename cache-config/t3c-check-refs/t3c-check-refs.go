@@ -72,6 +72,7 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 	log.Debugf("line: %s\n", line)
 
 	// create an array of whitespace delimited fields
+	// スペースの連続で区切って各行のフィールドが何個存在するのかをチェックします
 	l := regexp.MustCompile(`\s+`)
 	fields := l.Split(line, -1)
 	length := len(fields)
@@ -86,8 +87,11 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 		fields[0] == "redirect" ||
 		fields[0] == "redirect_temporary") {
 
+		// remap.configの各行の処理となる。最初のフィールドは上のifでチェックされていて、3つ以上のフィールドがないとエラー
+
 		for ii := 3; ii < len(fields); ii++ {
 			if strings.HasPrefix(fields[ii], "@plugin=") {
+				// フィールドに@plungin=が含まれている場合のチェック
 				sa := strings.Split(fields[ii], "=")
 				if len(sa) != 2 {
 					log.Errorf("malformed @plugin definition on line '%d'\n", lineNumber)
@@ -108,20 +112,25 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 					}
 				}
 			} else if strings.HasPrefix(fields[ii], "@pparam") {
+				// フィールドに@pparam=が含まれている場合のチェック
 				// any plugin parameters that end in '.config | .cfg | .txt | yml | .yaml'
 				// are assumed to be configuration files and are checked that they
 				// exist in the filesystem at the absolute location in the name
 				// or relative to the ATS configuration files directory.
 				m := regexp.MustCompile(`^*(\.config|\.cfg|\.txt|\.yml|\.yaml)+`)
+
+				// @pparam=xxxx.txtのようになっているので"="でセパレートする
 				sa := strings.Split(fields[ii], "=")
 				if len(sa) != 2 && len(sa) != 3 {
 					log.Errorf("malformed @pparam definition in remap.config on line '%d': %v\n", lineNumber, fields)
 					pluginErrorCount++
 				} else {
 					param := strings.TrimSpace(sa[1])
+					// ^*(\.config|\.cfg|\.txt|\.yml|\.yaml)にマッチする場合には@pparamに設定ファイルが指定されたものとみなしてファイルの存在チェックを行う
 					if m.MatchString(param) {
 						verified, exists = pluginParams[param]
 						if !exists {
+							// ファイルが存在する稼働かをチェックする
 							verified = verifyPluginConfigfile(param, filesAdding)
 							pluginParams[param] = verified
 						}
@@ -138,12 +147,15 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 			}
 		}
 	} else { // process a line from plugin.config
+		// plugin.configの各行の処理
 
 		// process a line from plugin.config
+		// フィールドが1つ以上(空行ではなく)あり、1つmのフィールドのsuffixが.so終わる場合の
 		if length > 0 && strings.HasSuffix(fields[0], ".so") {
 			key := strings.TrimSpace(fields[0])
 			verified, exists = pluginChecks[key]
 			if !exists {
+				// soファイルのプラグインが存在するかどうかのチェック
 				verified = verifyPlugin(key)
 				pluginChecks[key] = verified
 			}
@@ -239,6 +251,7 @@ func verifyPlugin(filename string) bool {
 	}
 }
 
+// このt3c-check-refsはplugin.configとremap.configの2つのファイルだけ呼ばれる可能性があります。呼び出し元でこの制御が行われています。
 func main() {
 	// The count of plugins that could not be verified is returned
 	// to the calling program.
@@ -285,6 +298,7 @@ func main() {
 	textArray := make([]string, 0)
 
 	// scan the stream line by line
+	// 1行ずつ処理を行う
 	for scanner.Scan() {
 		text := scanner.Text()
 		log.Debugf("parsing: %s\n", text)
@@ -297,6 +311,7 @@ func main() {
 		textArray = append(textArray, scanner.Text())
 
 		// check for and concatenate lines that have the '\' continuation marker
+		// "\"で終わっているケースについては改行と見なしてcontinueする
 		if strings.HasSuffix(scanner.Text(), "\\") {
 			lineNumber++
 			continue
@@ -305,11 +320,13 @@ func main() {
 		line = strings.Join(textArray, " ")
 		line = strings.ReplaceAll(line, "\\", " ")
 
+		// t3c-check-refsはplugin.configとremap.configの2つのファイルだけ呼ばれる可能性があります。
 		pluginErrorCount += checkConfigLine(line, lineNumber, cfg.FilesAdding)
 		lineNumber++
 		textArray = make([]string, 0)
 	}
 
+	// checkConfigLineの戻り値が1つでもあれば、ファイルが不正であるとして異常エラーとします。
 	if pluginErrorCount > 0 {
 		log.Errorf("there are '%d' plugins that could not be verified\n", pluginErrorCount)
 		os.Exit(pluginErrorCount)

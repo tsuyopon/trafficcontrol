@@ -76,14 +76,18 @@ func main() {
 	//        ssl/*.cer, ssl/*.key, anything else in /trafficserver,
 	//
 
+	// {"plugin.config", "50-ats.rules"}の2つのファイルがrangeで実行される
 	for _, fileRequiringRestart := range configFilesRequiringRestart {
 		for _, changedPath := range changedConfigFiles {
+			// もしファイルが一致したら再起動させる
 			if strings.HasSuffix(changedPath, fileRequiringRestart) {
 				ExitRestart()
 			}
 		}
 	}
 
+	// 
+	// 「ssl_multicert.config」や「hdr_rw_」、「url_sig_」、「uri_signing_」、「plugin.config」、「50-ats.rules」を含む場合にはrealodを実行する
 	for _, path := range changedConfigFiles {
 		// TODO add && ssl keys install
 		if strings.Contains(path, "ssl_multicert.config") /* && sslKeysInstalled */ {
@@ -101,6 +105,7 @@ func main() {
 		}
 	}
 
+	// 何もしない
 	ExitNothing()
 }
 
@@ -109,14 +114,14 @@ type ChangedCfg struct {
 }
 
 // ExitRestart returns the "needs restart" message and exits.
-// 呼び出し側ではこの戻り値で返される関数が実行される
+// ここでは出力するだけだが、呼び出し側ではこの戻り値で返される関数が実行される
 func ExitRestart() {
 	fmt.Fprintf(os.Stdout, t3cutil.ServiceNeedsRestart.String()+"\n")
 	os.Exit(0)
 }
 
 // ExitReload returns the "needs reload" message and exits.
-// 呼び出し側ではこの戻り値で返される関数が実行される
+// ここでは出力するだけだが、呼び出し側ではこの戻り値で返される関数が実行される
 func ExitReload() {
 	fmt.Fprintf(os.Stdout, t3cutil.ServiceNeedsReload.String()+"\n")
 	os.Exit(0)

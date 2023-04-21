@@ -77,8 +77,10 @@ func main() {
 		os.Exit(ExitCodeUnknownCommand)
 	}
 
+	// 指定された引数に応じてt3c-check-refsやt3-check-relodになる。t3cと同じ様にただのwrapperプログラム
 	app := "t3c-check-" + cmd
 
+	// コマンドが存在するかをチェックする
 	appPath, err := exec.LookPath(app)
 	if err != nil {
 		log.Errorf("error finding path to '%s': %s\n", app, err.Error())
