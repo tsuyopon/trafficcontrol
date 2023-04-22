@@ -97,7 +97,7 @@ func Main() int {
 		return ExitCodeSuccess
 	}
 
-	// /var/run/t3c.lockがあるかどうかでロックされているかをチェックします。
+	// /var/run/t3c.lockがあるかどうかでこのプロセスがロックされているかをチェックします。
 	log.Infoln("Trying to acquire app lock")
 	for lockStart := time.Now(); !lock.GetLock(LockFilePath); {
 		if time.Since(lockStart) > LockFileRetryTimeout {
@@ -109,9 +109,9 @@ func Main() int {
 	}
 	log.Infoln("Acquired app lock")
 
-	// git=yが指定されている場合
+	// オプションに--git=yesが指定されている場合
 	if cfg.UseGit == config.UseGitYes {
-		// gitレポジトリがなければ生成する
+		// gitレポジトリがなければgit initにより生成する
 		err := util.EnsureConfigDirIsGitRepo(cfg)
 		if err != nil {
 			log.Errorln("Ensuring config directory '" + cfg.TsConfigDir + "' is a git repo - config may not be a git repo! " + err.Error())
@@ -122,15 +122,17 @@ func Main() int {
 		log.Infoln("UseGit not 'yes', not creating git repo")
 	}
 
+	// オプションに --git=yes または --git=auto が指定されている場合
 	if cfg.UseGit == config.UseGitYes || cfg.UseGit == config.UseGitAuto {
 		// commit anything someone else changed when we weren't looking,
 		// with a keyword indicating it wasn't our change
-		// 誰かが変更したものについては、このプログラムのcommitでないコメントを指定してcommitする
+		// このプログラムではない誰かが変更したものについては、このプログラムのcommitでないコメントを指定してcommitする
 		if err := util.MakeGitCommitAll(cfg, util.GitChangeNotSelf, true); err != nil {
 			log.Errorln("git committing existing changes, dir '" + cfg.TsConfigDir + "': " + err.Error())
 		}
 	}
 
+	// オブジェクトの生成を行う
 	trops := torequest.NewTrafficOpsReq(cfg)
 
 	// if doing os checks, insure there is a 'systemctl' or 'service' and 'chkconfig' commands.
@@ -139,6 +141,7 @@ func Main() int {
 	}
 
 	// create and clean the config.TmpBase (/tmp/ort)
+	// /tmp/trafficcontrol-cache-configを適切な権限・オーナーで生成します。
 	if !util.MkDir(config.TmpBase, cfg) {
 		log.Errorln("mkdir TmpBase '" + config.TmpBase + "' failed, cannot continue")
 		log.Infoln(FailureExitMsg)
@@ -160,6 +163,7 @@ func Main() int {
 
 	// if running in Revalidate mode, check to see if it's
 	// necessary to continue
+	// filesにrevalモードが指定されている場合の処理
 	if cfg.Files == t3cutil.ApplyFilesFlagReval { // --files=reval
 		syncdsUpdate, err = trops.CheckRevalidateState(false)
 
@@ -232,12 +236,12 @@ func Main() int {
 	}
 
 	log.Debugf("Preparing to fetch the config files for %s, files: %s, syncdsUpdate: %s\n", cfg.CacheHostName, cfg.Files, syncdsUpdate)
+	// 設定ファイルの取得と生成はここで行われている。t3c-generateとファイル情報をオブジェクトにマッピングしている
 	err = trops.GetConfigFileList()
 	if err != nil {
 		log.Errorf("Getting config file list: %s\n", err)
 		return GitCommitAndExit(ExitCodeConfigFilesError, FailureExitMsg, cfg)
 	}
-
 
 	syncdsUpdate, err = trops.ProcessConfigFiles()
 	if err != nil {
@@ -246,6 +250,7 @@ func Main() int {
 
 	// check for maxmind db updates
 	// If we've updated also reload remap to reload the plugin and pick up the new database
+	// --maxmind-locationオプションにURLが指定されている場合にフラグが変更される
 	if CheckMaxmindUpdate(cfg) {
 		trops.RemapConfigReload = true
 	}
@@ -290,8 +295,10 @@ func Main() int {
 		runSysctl(cfg)
 	}
 
+	// configFileWarningsがあればここで表示する
 	trops.PrintWarnings()
 
+	// TrafficOps APIに対してserverStatusの更新処理を行う
 	if err := trops.UpdateTrafficOps(&syncdsUpdate); err != nil {
 		log.Errorf("failed to update Traffic Ops: %s\n", err.Error())
 	}

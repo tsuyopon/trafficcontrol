@@ -212,6 +212,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 
 	log.Debugf("======== Start processing config file: %s ========\n", cfg.Name)
 
+	// remap.configが対象であれば
 	if cfg.Name == "remap.config" {
 		err := r.processRemapOverrides(cfg)
 		if err != nil {
@@ -228,6 +229,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 		log.Infoln("Successfully verified plugins used by '" + cfg.Name + "'")
 	}
 
+	// .cer拡張子を持ったファイルがあればX509証明書として妥当かどうかをcheckCert()により検証する
 	if strings.HasSuffix(cfg.Name, ".cer") {
 		if err := checkCert(cfg.Body); err != nil {
 			r.configFileWarnings[cfg.Name] = append(r.configFileWarnings[cfg.Name], fmt.Sprintln(err))
@@ -237,6 +239,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 		}
 	}
 
+	// t3c-diffを実行する
 	changeNeeded, err := diff(r.Cfg, cfg.Body, cfg.Path, r.Cfg.ReportOnly, cfg.Perm, cfg.Uid, cfg.Gid)
 
 	if err != nil {
@@ -269,6 +272,8 @@ func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
 	if !fileExists {
 		log.Errorf("status file %s does not exist.\n", statusFile)
 	}
+
+	// t3c-request --get-data=statuses を実行する
 	statuses, err := getStatuses(r.Cfg)
 	if err != nil {
 		return fmt.Errorf("could not retrieves a statuses list from Traffic Ops: %s\n", err)
@@ -327,6 +332,7 @@ func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 
 			_, ok := overrides[from]
 			if ok == true { // check if this line should be overriden
+				// see. https://github.com/apache/trafficcontrol/blob/master/docs/source/admin/traffic_server.rst
 				newstr := "##OVERRIDDEN## " + str
 				newlines = append(newlines, newstr)
 				overridenCount++
@@ -613,6 +619,7 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 	var atsUid int = 0
 	var atsGid int = 0
 
+	// trafficserverの設定として指定された「ats」オーナーであることのチェック。その後にatsのuidやgidを取得する
 	atsUser, err := user.Lookup(config.TrafficServerOwner)
 	if err != nil {
 		log.Errorf("could not lookup the trafficserver, '%s', owner uid, using uid/gid 0",
@@ -630,6 +637,7 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 		}
 	}
 
+	// t3c-generateによるTrafficOpsから設定情報を取得しての設定生成処理はここで行われます。
 	allFiles, err := generate(r.Cfg)
 	if err != nil {
 		return errors.New("requesting data generating config files: " + err.Error())
@@ -638,6 +646,8 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 	r.configFiles = map[string]*ConfigFile{}
 	r.configFileWarnings = map[string][]string{}
 	var mode os.FileMode
+
+	// generateで取得した情報を全てconfigFilesのオブジェクトにマッピングします。このオブジェクトはファイル名、パス、ファイル内容、Uid、Gid、パーミッション等を含みます。
 	for _, file := range allFiles {
 		if file.Secure {
 			mode = 0600
@@ -655,6 +665,8 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 			Perm:     mode,
 			Warnings: file.Warnings,
 		}
+
+		// warningがあれば登録しておく。ここはmainから最後にprintされる内容になります。
 		for _, warn := range file.Warnings {
 			if warn == "" {
 				continue
@@ -679,6 +691,8 @@ func (r *TrafficOpsReq) PrintWarnings() {
 // CheckRevalidateState retrieves and returns the revalidate status from Traffic Ops.
 func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, error) {
 	log.Infoln("Checking revalidate state.")
+
+	// revalの対象外の場合には即座にreturn
 	if !sleepOverride &&
 		(r.Cfg.ReportOnly || r.Cfg.Files != t3cutil.ApplyFilesFlagReval) { // --report-only=true または 「--files=reval以外」
 		updateStatus := UpdateTropsNotNeeded
@@ -688,16 +702,22 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 
 	updateStatus := UpdateTropsNotNeeded
 
+	// 下記ではt3c-request --get-data=update-status が実行される
 	serverStatus, err := getUpdateStatus(r.Cfg)
 	if err != nil {
 		log.Errorln("getting update status: " + err.Error())
 		return UpdateTropsNotNeeded, errors.New("getting update status: " + err.Error())
 	}
+
 	log.Infof("my status: %s\n", serverStatus.Status)
+
+	// jsonの戻り値として use_reval_pending = falseになっている場合
 	if serverStatus.UseRevalPending == false {
 		log.Errorln("Update URL: Instant invalidate is not enabled.  Separated revalidation requires upgrading to Traffic Ops version 2.2 and enabling this feature.")
 		return UpdateTropsNotNeeded, nil
 	}
+
+	// jsonの戻り値としてrevalPendingがtrueになっているとことを示している
 	if serverStatus.RevalPending == true {
 		log.Errorln("Traffic Ops is signaling that a revalidation is waiting to be applied.")
 		updateStatus = UpdateTropsNeeded

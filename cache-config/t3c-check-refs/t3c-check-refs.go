@@ -80,6 +80,9 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 	log.Debugf("length: %d, fields: %v", length, fields)
 
 	// processing a line from remap.config
+	// remap.configは3つのフィールドが必要: https://docs.trafficserver.apache.org/admin-guide/files/remap.config.en.html#reverse-proxy-mapping-rules
+	// 以下の6つのtypeはremap.configのタイプで規定されている。regex_mapやregex_redirect, regex_map_with_recv_portは下記の分岐には含まれていない模様
+	// see: https://docs.trafficserver.apache.org/admin-guide/files/remap.config.en.html#format
 	if length > 3 && (fields[0] == "map" ||
 		fields[0] == "map_with_recv_port" ||
 		fields[0] == "map_with_referer" ||
@@ -88,7 +91,7 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 		fields[0] == "redirect_temporary") {
 
 		// remap.configの各行の処理となる。最初のフィールドは上のifでチェックされていて、3つ以上のフィールドがないとエラー
-
+		// see: https://docs.trafficserver.apache.org/admin-guide/files/remap.config.en.html#reverse-proxy-mapping-rules
 		for ii := 3; ii < len(fields); ii++ {
 			if strings.HasPrefix(fields[ii], "@plugin=") {
 				// フィールドに@plungin=が含まれている場合のチェック
@@ -121,6 +124,8 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 
 				// @pparam=xxxx.txtのようになっているので"="でセパレートする
 				sa := strings.Split(fields[ii], "=")
+
+				// @pparam=xxxx のフィールド群が=でセパレートした場合に2つか3つで分けられない場合にはエラーを表示する ( @plugin=xxx.so や @pparam=--static-prefix=hoge.jp )
 				if len(sa) != 2 && len(sa) != 3 {
 					log.Errorf("malformed @pparam definition in remap.config on line '%d': %v\n", lineNumber, fields)
 					pluginErrorCount++

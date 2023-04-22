@@ -198,6 +198,7 @@ func getChkconfig(cfg config.Cfg) ([]map[string]string, error) {
 
 func getUpdateStatus(cfg config.Cfg) (*atscfg.ServerUpdateStatus, error) {
 	status := atscfg.ServerUpdateStatus{}
+	// t3c-request --get-data=update-status が実行される
 	if err := requestJSON(cfg, "update-status", &status); err != nil {
 		return nil, errors.New("requesting json: " + err.Error())
 	}
@@ -506,6 +507,8 @@ func requestConfig(cfg config.Cfg) ([]byte, error) {
 
 	log.Infof("config cache bytes: %v\n", len(cacheBts))
 
+	// ここで指定した値によって t3c-request --get-data=configが指定されることになります。
+	// 設定ファイルの情報はこのコマンドから取得が行われます。
 	args := []string{
 		"request",
 		"--traffic-ops-insecure=" + strconv.FormatBool(cfg.TOInsecure),
