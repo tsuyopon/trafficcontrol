@@ -55,6 +55,7 @@ type TOClient struct {
 	// and c will be nil and old will not, and old must be used.
 	//
 	// **WARNING** This MUST NOT be accessed without checking for nil. See above.
+	// ここのtoclientはv4-clientを指している
 	c *toclient.Session
 
 	// old is the "old" Traffic Ops client, for the previous major API.

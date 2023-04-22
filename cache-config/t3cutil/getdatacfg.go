@@ -299,6 +299,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 
 		toData.Server = server
 
+		// serversF関数宣言の中に定義される関数
 		sslF := func() error {
 			defer func(start time.Time) { log.Infof("sslF took %v\n", time.Since(start)) }(time.Now())
 
@@ -326,6 +327,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			}
 			return nil
 		}
+
+		// serversF関数宣言の中に定義される関数
 		dsF := func() error {
 			defer func(start time.Time) { log.Infof("dsF took %v\n", time.Since(start)) }(time.Now())
 
@@ -363,6 +366,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			// 	}
 			// }
 
+			// serversF関数宣言の中のdsF関数宣言に含まれる関数
 			dssF := func() error {
 				defer func(start time.Time) { log.Infof("dssF took %v\n", time.Since(start)) }(time.Now())
 
@@ -390,6 +394,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				return nil
 			}
 
+			// serversF関数宣言の中のdsF関数宣言に含まれる関数
 			uriSignKeysF := func() error {
 				defer func(start time.Time) { log.Infof("uriF took %v\n", time.Since(start)) }(time.Now())
 				uriSigningKeys := map[tc.DeliveryServiceName][]byte{}
@@ -432,6 +437,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				return nil
 			}
 
+			// serversF関数宣言の中のdsF関数宣言に含まれる関数
 			urlSigKeysF := func() error {
 				defer func(start time.Time) { log.Infof("urlF took %v\n", time.Since(start)) }(time.Now())
 				urlSigKeys := map[tc.DeliveryServiceName]tc.URLSigKeys{}
@@ -474,6 +480,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				return nil
 			}
 
+			// serversF関数宣言の中のdsF関数宣言に含まれる関数
 			fs := []func() error{}
 			if !revalOnly {
 				fs = append([]func() error{uriSignKeysF, urlSigKeysF}, fs...) // skip keys for reval-only, which doesn't need them
@@ -486,6 +493,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			return util.JoinErrs(runParallel(fs))
 		}
 
+		// serversF関数宣言の中に定義される関数
 		// TODO use a single func/request, when TO has an endpoint to get all params on multiple profiles with a single request, e.g. `/parameters?profiles=a,b,c`
 		serverParamsF := func(profileName atscfg.ProfileName) error {
 			defer func(start time.Time) { log.Infof("serverParamsF(%v) took %v\n", profileName, time.Since(start)) }(time.Now())
@@ -521,6 +529,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			serverParamsFs = append(serverParamsFs, func() error { return serverParamsF(atscfg.ProfileName(profileName)) })
 		}
 
+		// serversF関数宣言の中に定義される関数
 		cdnF := func() error {
 			defer func(start time.Time) { log.Infof("cdnF took %v\n", time.Since(start)) }(time.Now())
 			{
@@ -545,6 +554,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			}
 			return nil
 		}
+
+		// serversF関数宣言の中に定義される関数
 		jobsF := func() error {
 			defer func(start time.Time) { log.Infof("jobsF took %v\n", time.Since(start)) }(time.Now())
 			{
@@ -569,11 +580,15 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			}
 			return nil
 		}
+
+		// serversF関数の中で宣言される下記の３つの関数はここでセットされる
 		fs := []func() error{dsF, cdnF, jobsF}
 		fs = append(fs, serverParamsFs...)
 		if !revalOnly {
 			fs = append([]func() error{sslF}, fs...) // skip ssl keys for reval only, which doesn't need them
 		}
+
+		// serversF関数定義の中でrunParallelにより上記で宣言されたfsが並列実行される
 		return util.JoinErrs(runParallel(fs))
 	}
 
@@ -601,6 +616,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		}
 		return nil
 	}
+
 	capsF := func() error {
 		defer func(start time.Time) { log.Infof("capsF took %v\n", time.Since(start)) }(time.Now())
 		{
@@ -627,6 +643,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		}
 		return nil
 	}
+
 	dsCapsF := func() error {
 		defer func(start time.Time) { log.Infof("dscapsF took %v\n", time.Since(start)) }(time.Now())
 		{
@@ -652,6 +669,7 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		}
 		return nil
 	}
+
 	dsrF := func() error {
 		defer func(start time.Time) { log.Infof("dsrF took %v\n", time.Since(start)) }(time.Now())
 		{
@@ -776,11 +794,13 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		}
 		return nil
 	}
+	// ここまでが関数定義
 
+	// 以下の配列定義とrunParallelで上記で定義した関数定義が実行される。
 	fs := []func() error{serversF, cgF}
 	if !revalOnly {
 		// skip data not needed for reval, if we're reval-only
-		fs = append([]func() error{dsrF, cacheKeyConfigParamsF, remapConfigParamsF, parentConfigParamsF, capsF, dsCapsF, topologiesF}, fs...)
+		fs = append([]func() error{dsrF, cacheKeyConfigParamsF, remapConfigParamsF, parentConfigParamsF, capsF, dsCapsF, topologiesF}, fs...) // ここで関数定義の配列をfsにセット
 	}
 	errs := runParallel(fs)
 

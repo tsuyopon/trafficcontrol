@@ -101,10 +101,12 @@ func (cl *TOClient) GetServers() ([]atscfg.Server, toclientlib.ReqInf, error) {
 func (cl *TOClient) GetServerByHostName(serverHostName string) (*atscfg.Server, toclientlib.ReqInf, error) {
 	server := atscfg.Server{}
 	reqInf := toclientlib.ReqInf{}
+
+	// GetRetryの最後の引数には無名関数が指定されていることに注意。
 	err := torequtil.GetRetry(cl.NumRetries, "server-name-"+serverHostName, &server, func(obj interface{}) error {
 		params := &url.Values{}
 		params.Add("hostName", serverHostName)
-		toServers, toReqInf, err := cl.c.GetServersWithHdr(params, nil)
+		toServers, toReqInf, err := cl.c.GetServersWithHdr(params, nil)  // 「/servers?hostname=
 		if err != nil {
 			return errors.New("getting server name '" + serverHostName + "' from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		} else if len(toServers.Response) < 1 {

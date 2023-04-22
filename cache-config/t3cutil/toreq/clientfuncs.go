@@ -150,11 +150,13 @@ func (cl *TOClient) GetServers(reqHdr http.Header) ([]atscfg.Server, toclientlib
 
 func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Header) (*atscfg.Server, toclientlib.ReqInf, error) {
 	if cl.c == nil {
-		return cl.old.GetServerByHostName(serverHostName)
+		return cl.old.GetServerByHostName(serverHostName)  // cache-config/t3cutil/toreq/toreqold/clientfuncs.go の GetServerByHostName ハンドラが呼ばれる
 	}
 
 	server := atscfg.Server{}
 	reqInf := toclientlib.ReqInf{}
+
+	// GetRetryの最後の引数に無名関数が実行されていることに注意する
 	err := torequtil.GetRetry(cl.NumRetries, "server-name-"+serverHostName, &server, func(obj interface{}) error {
 		params := url.Values{}
 		params.Add("hostName", serverHostName)
@@ -717,13 +719,15 @@ func (cl *TOClient) GetStatuses(reqHdr http.Header) ([]tc.Status, toclientlib.Re
 // GetServerUpdateStatus returns the data, the Traffic Ops address, and any error.
 func (cl *TOClient) GetServerUpdateStatus(cacheHostName tc.CacheName, reqHdr http.Header) (atscfg.ServerUpdateStatus, toclientlib.ReqInf, error) {
 	if cl.c == nil {
-		return cl.old.GetServerUpdateStatus(cacheHostName)
+		return cl.old.GetServerUpdateStatus(cacheHostName)  // cache-config/t3cutil/toreq/toreqold/clientfuncs.goのGetServerUpdateStatusが呼ばれる
 	}
 
 	status := atscfg.ServerUpdateStatus{}
 	reqInf := toclientlib.ReqInf{}
+
+	// 引数の最後に指定されているのは無名関数であることに注意すること。呼び出し先のGetRetryからこの無名関数が実行される
 	err := torequtil.GetRetry(cl.NumRetries, "server_update_status_"+string(cacheHostName), &status, func(obj interface{}) error {
-		toStatus, toReqInf, err := cl.c.GetServerUpdateStatus(string(cacheHostName), *ReqOpts(reqHdr))
+		toStatus, toReqInf, err := cl.c.GetServerUpdateStatus(string(cacheHostName), *ReqOpts(reqHdr)) // traffic_ops/v4-client/server.go のGetServerUpdateStatusを呼び出す
 		if err != nil {
 			return errors.New("getting server update status from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}

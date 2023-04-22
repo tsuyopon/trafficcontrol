@@ -38,6 +38,7 @@ var Version = "0.4"
 // This is overwritten by the build with the current project version.
 var GitRevision = "nogit"
 
+// この関数はt3c-applyから実行される
 func main() {
 	cfg, err := config.InitConfig(Version, GitRevision)
 	if err != nil {
@@ -63,6 +64,7 @@ func main() {
 		log.Warnln("Traffic Ops does not support the latest version supported by this app! Falling back to previous major Traffic Ops API version!")
 	}
 
+	// --get-data=<mode>で指定される。<mode>にはstatuses, chkconfig, update-status, system-info, packagesなどが指定される
 	if cfg.GetData != "" {
 		if err := t3cutil.WriteData(cfg.TCCfg); err != nil {
 			log.Errorf("writing data: %s\n", err.Error())

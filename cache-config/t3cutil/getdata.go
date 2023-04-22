@@ -72,7 +72,7 @@ func GetDataFuncs() map[string]func(TCCfg, io.Writer) error {
 }
 
 func GetServerUpdateStatus(cfg TCCfg) (*atscfg.ServerUpdateStatus, error) {
-	status, _, err := cfg.TOClient.GetServerUpdateStatus(tc.CacheName(cfg.CacheHostName), nil)
+	status, _, err := cfg.TOClient.GetServerUpdateStatus(tc.CacheName(cfg.CacheHostName), nil)  // cache-config/t3cutil/toreq/clientfuncs.goのGetServerUpdateStatusが呼ばれる
 	if err != nil {
 		return nil, errors.New("getting server '" + cfg.CacheHostName + "' update status: " + err.Error())
 	}
@@ -102,6 +102,7 @@ const SystemInfoParamConfigFile = `global`
 //
 // This is identical to the /system/info endpoint, except it does not include a
 //  '{response: {parameters:' wrapper.
+// --get-data=system-info がオプションとして指定された場合に呼ばれるハンドラ
 func WriteSystemInfo(cfg TCCfg, output io.Writer) error {
 	paramArr, _, err := cfg.TOClient.GetConfigFileParameters(SystemInfoParamConfigFile, nil)
 	if err != nil {
@@ -120,6 +121,7 @@ func WriteSystemInfo(cfg TCCfg, output io.Writer) error {
 // WriteStatuses writes the Traffic Ops statuses to output.
 // Note this is identical to /statuses except it omits the '{response:'
 // wrapper.
+// --get-data=statuses がオプションとして指定された場合に呼ばれるハンドラ
 func WriteStatuses(cfg TCCfg, output io.Writer) error {
 	statuses, _, err := cfg.TOClient.GetStatuses(nil)
 	if err != nil {
@@ -136,8 +138,9 @@ func WriteStatuses(cfg TCCfg, output io.Writer) error {
 // Note this is identical to the Traffic Ops API's
 // /servers/{{host name}}/update_status endpoint except it omits the '[]'
 // wrapper.
+// --get-data=update-status がオプションとして指定された場合に呼ばれるハンドラ
 func WriteServerUpdateStatus(cfg TCCfg, output io.Writer) error {
-	status, err := GetServerUpdateStatus(cfg)
+	status, err := GetServerUpdateStatus(cfg) // // t3cutil/getdata.goのGetServerUpdateStatusが呼ばれる
 	if err != nil {
 		return err
 	}
@@ -149,6 +152,7 @@ func WriteServerUpdateStatus(cfg TCCfg, output io.Writer) error {
 
 // WriteORTServerPackages writes the packages for serverName to output.
 // Note this is identical to /ort/serverName/packages.
+// --get-data=packages がオプションとして指定された場合に呼ばれるハンドラ
 func WritePackages(cfg TCCfg, output io.Writer) error {
 	packages, err := GetPackages(cfg)
 	if err != nil {
@@ -194,6 +198,7 @@ type Package struct {
 
 // WriteChkconfig writes the chkconfig for cfg.CacheHostName to output.
 // Note this is identical to /ort/serverName/chkconfig.
+// --get-data=chkconfig がオプションとして指定された場合に呼ばれるハンドラ
 func WriteChkconfig(cfg TCCfg, output io.Writer) error {
 	chkconfig, err := GetChkconfig(cfg)
 	if err != nil {
@@ -206,7 +211,7 @@ func WriteChkconfig(cfg TCCfg, output io.Writer) error {
 }
 
 func GetChkconfig(cfg TCCfg) ([]ChkConfigEntry, error) {
-	server, _, err := cfg.TOClient.GetServerByHostName(string(cfg.CacheHostName), nil)
+	server, _, err := cfg.TOClient.GetServerByHostName(string(cfg.CacheHostName), nil)  // t3cutil/toreq/clientfuncs.go の GetServerByHostNameが呼ばれる
 	if err != nil {
 		return nil, errors.New("getting server: " + err.Error())
 	} else if len(server.ProfileNames) == 0 {
@@ -260,6 +265,7 @@ func SetUpdateStatusCompat(cfg TCCfg, serverName tc.CacheName, configApply, reva
 }
 
 // WriteConfig writes the Traffic Ops data necessary to generate config to output.
+// --get-data=config がオプションとして指定された場合に呼ばれるハンドラ
 func WriteConfig(cfg TCCfg, output io.Writer) error {
 	cfgData, err := GetConfigData(cfg.TOClient, cfg.TODisableProxy, cfg.CacheHostName, cfg.RevalOnly, cfg.OldCfg, cfg.T3CVersion)
 	if err != nil {
