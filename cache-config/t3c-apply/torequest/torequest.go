@@ -1084,9 +1084,11 @@ func (r *TrafficOpsReq) RevalidateWhileSleeping() (UpdateStatus, error) {
 // Returns nil on success or any error.
 func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 	serviceNeeds := t3cutil.ServiceNeedsNothing
-	if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {
+	if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart
+		// --service-action=restartの場合には、再起動させるようにする
 		serviceNeeds = t3cutil.ServiceNeedsRestart
 	} else {
+		// --service-action=restart以外の場合にはt3c-check-reloadを実行して、次回の状態をどうするか決める(何もしない、再起動、再読込、不正の4種類)
 		err := error(nil)
 		if serviceNeeds, err = checkReload(r.changedFiles); err != nil {
 			return errors.New("determining if service needs restarted - not reloading or restarting! : " + err.Error())
@@ -1098,6 +1100,7 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 	// We have our own internal knowledge of files that have been modified as well
 	// If check-reload does not know about these and we do, then we should initiate
 	// a reload as well
+	// 再起動も再読み込みいずれも指定されていないが、r.TrafficCtlReloadかr.RemapConfigReloadが内部状態として指定されている場合には再読み込みとして扱うことにする
 	if serviceNeeds != t3cutil.ServiceNeedsRestart && serviceNeeds != t3cutil.ServiceNeedsReload {
 		if r.TrafficCtlReload || r.RemapConfigReload {
 			log.Infof("ATS config files unchanged, we updated files via t3c-apply, ATS needs reload")
@@ -1105,11 +1108,13 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 		}
 	}
 
+	// 再起動か再読込のいずれかが指定されているにもかかわらず、trafficserverがインストールされていなければエラーとする。
 	if (serviceNeeds == t3cutil.ServiceNeedsRestart || serviceNeeds == t3cutil.ServiceNeedsReload) && !r.IsPackageInstalled("trafficserver") {
 		// TODO try to reload/restart anyway? To allow non-RPM installs?
 		return errors.New("trafficserver needs " + serviceNeeds.String() + " but is not installed.")
 	}
 
+	// 「/usr/sbin/service trafficserver status」を実行してActiveが帰ってきているかによって、サービス状態を判定する。
 	svcStatus, _, err := util.GetServiceStatus("trafficserver")
 	if err != nil {
 		return errors.New("getting trafficserver service status: " + err.Error())
@@ -1122,7 +1127,7 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 			log.Errorln("ATS configuration has changed. 'traffic_ctl config reload' needs to be run")
 		}
 		return nil
-	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {
+	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart
 		startStr := "restart"
 		if svcStatus != util.SvcRunning {
 			startStr = "start"

@@ -112,7 +112,7 @@ func GetDeliveryServiceURLSigKeys(toClient *toclient.Session, dsName string, opt
 	if opts == nil {
 		opts = &toclient.RequestOptions{}
 	}
-	resp, reqInf, err := toClient.GetDeliveryServiceURLSignatureKeys(dsName, *opts)
+	resp, reqInf, err := toClient.GetDeliveryServiceURLSignatureKeys(dsName, *opts) // 「/deliveryservices/xmlId/<dsName>/urlkeys」 (GET)
 	return resp.Response, reqInf, err
 }
 

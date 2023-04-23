@@ -206,6 +206,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		if oldCfg != nil {
 			reqHdr = MakeReqHdr(oldCfg.MetaData.GlobalParams)
 		}
+
+		// 「/profiles/name/GLOBAL/parameters」(GET)ヘのリクエスト
 		globalParams, reqInf, err := toClient.GetGlobalParameters(reqHdr)
 		log.Infoln(toreq.RequestInfoStr(reqInf, "GetGlobalParameters"))
 		if err != nil {
@@ -264,6 +266,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.Servers)
 			}
+
+			// 「/servers」 (GET)へのリクエスト
 			servers, reqInf, err := toClient.GetServers(reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetServers"))
 			if err != nil {
@@ -309,6 +313,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				if oldCfg != nil && oldServer.CDNName != nil && *oldServer.CDNName == *server.CDNName {
 					reqHdr = MakeReqHdr(oldCfg.MetaData.SSLKeys)
 				}
+
+				// 「/cdns/name/<cdnName>/sslkeys」(GET)ヘのリクエスト
 				keys, reqInf, err := toClient.GetCDNSSLKeys(tc.CDNName(*server.CDNName), reqHdr)
 				log.Infoln(toreq.RequestInfoStr(reqInf, "GetCDNSSLKeys("+*server.CDNName+")"))
 				if err != nil {
@@ -337,6 +343,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				if oldCfg != nil && oldServer.CDNName != nil && *oldServer.CDNName == *server.CDNName {
 					reqHdr = MakeReqHdr(oldCfg.MetaData.DeliveryServices)
 				}
+
+				// 「/deliveryservices?cdn=<cdnID>」(GET)へのリクエスト
 				dses, reqInf, err := toClient.GetCDNDeliveryServices(*server.CDNID, reqHdr)
 				log.Infoln(toreq.RequestInfoStr(reqInf, "GetCDNDeliveryServices("+strconv.Itoa(*server.CDNID)+")"))
 				if err != nil {
@@ -375,6 +383,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 					if oldCfg != nil && oldServer.CDNName != nil && *oldServer.CDNName == *server.CDNName {
 						reqHdr = MakeReqHdr(oldCfg.MetaData.DeliveryServiceServers)
 					}
+
+					// 「/deliveryserviceserver?limit=999999&cdn=<cdnName>&orderby=&deliveryserviceids<dsIDStrs:カンマ区切り>&serverids=<serverIDStrs:カンマ区切り>」(GET)
 					dss, reqInf, err := toClient.GetDeliveryServiceServers(nil, nil, *server.CDNName, reqHdr)
 					log.Infoln(toreq.RequestInfoStr(reqInf, "GetDeliveryServiceServers("+*server.CDNName+")"))
 					if err != nil {
@@ -412,6 +422,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 					if oldCfg != nil && oldCfg.MetaData.URISigningKeys != nil {
 						reqHdr = MakeReqHdr(oldCfg.MetaData.URISigningKeys[tc.DeliveryServiceName(*ds.XMLID)])
 					}
+
+					// 「/deliveryservices/<dsName>/urisignkeys」(GET)ヘのリクエスト
 					keys, reqInf, err := toClient.GetURISigningKeys(*ds.XMLID, reqHdr)
 					log.Infoln(toreq.RequestInfoStr(reqInf, "GetURISigningKeys("+*ds.XMLID+")"))
 					if err != nil {
@@ -455,6 +467,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 					if oldCfg != nil {
 						reqHdr = MakeReqHdr(oldCfg.MetaData.URLSigKeys[tc.DeliveryServiceName(*ds.XMLID)])
 					}
+
+					// 「/deliveryservices/xmlId/<dsName>/urlkeys」 (GET)へのリクエスト
 					keys, reqInf, err := toClient.GetURLSigKeys(*ds.XMLID, reqHdr)
 					log.Infoln(toreq.RequestInfoStr(reqInf, "GetURLSigKeys("+*ds.XMLID+")"))
 					if err != nil {
@@ -504,6 +518,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 						reqHdr = MakeReqHdr(md)
 					}
 				}
+
+				// 「/profiles/name/<profileName>/parameters」(GET)ヘのリクエスト
 				params, reqInf, err := toClient.GetServerProfileParameters(string(profileName), reqHdr)
 				log.Infoln(toreq.RequestInfoStr(reqInf, "GetServerProfileParameters("+string(profileName)+")"))
 				if err != nil {
@@ -537,6 +553,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				if oldCfg != nil && oldServer.CDNName != nil && *oldServer.CDNName == *server.CDNName {
 					reqHdr = MakeReqHdr(oldCfg.MetaData.CDN)
 				}
+
+				// 「/cdns?name=」(GET)ヘのリクエスト
 				cdn, reqInf, err := toClient.GetCDN(tc.CDNName(*server.CDNName), reqHdr)
 				log.Infoln(toreq.RequestInfoStr(reqInf, "GetCDN("+*server.CDNName+")"))
 				if err != nil {
@@ -563,6 +581,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				if oldCfg != nil && oldServer.CDNName != nil && *oldServer.CDNName == *server.CDNName {
 					reqHdr = MakeReqHdr(oldCfg.MetaData.Jobs)
 				}
+
+				// 「/jobs?dsId=<deliveryServiceID>&userId=<userID>」(GET)から取得する   (処理があっているか要確認)
 				jobs, reqInf, err := toClient.GetJobs(reqHdr, *server.CDNName)
 				log.Infoln(toreq.RequestInfoStr(reqInf, "GetJobs("+*server.CDNName+")"))
 				if err != nil {
@@ -599,6 +619,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.CacheGroups)
 			}
+
+			// 「/cachegroups」(GET)から取得する
 			cacheGroups, reqInf, err := toClient.GetCacheGroups(reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetCacheGroups"))
 			if err != nil {
@@ -625,6 +647,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 				reqHdr = MakeReqHdr(oldCfg.MetaData.ServerCapabilities)
 			}
 			log.Infof("Getting config: ServerCapabilities reqHdr %+v", reqHdr)
+
+			// 「/server_server_capabilities」(GET)ヘのリクエスト
 			caps, reqInf, err := toClient.GetServerCapabilitiesByID(nil, reqHdr) // TODO change to not take a param; it doesn't use it to request TO anyway.
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetServerCapabilitiesByID"))
 			if err != nil {
@@ -651,6 +675,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.DSRequiredCapabilities)
 			}
+
+			// 「/deliveryservices_required_capabilities (GET)」ヘのリクエスト
 			caps, reqInf, err := toClient.GetDeliveryServiceRequiredCapabilitiesByID(nil, reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetDeliveryServiceRequiredCapabilitiesByID"))
 			if err != nil {
@@ -677,6 +703,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.DeliveryServiceRegexes)
 			}
+
+			// 「/deliveryservices_regexes」(GET)ヘのリクエスト
 			dsr, reqInf, err := toClient.GetDeliveryServiceRegexes(reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetDeliveryServiceRegexes"))
 			if err != nil {
@@ -702,6 +730,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.CacheKeyConfigParams)
 			}
+
+			// 「/parameters?configFile=cachekey.config」(GET)ヘのリクエスト
 			params, reqInf, err := toClient.GetConfigFileParameters("cachekey.config", reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetConfigFileParameters(cachekey.config)"))
 			if err != nil {
@@ -727,6 +757,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.RemapConfigParams)
 			}
+
+			// 「/parameters?configFile=remap.config」(GET)ヘのリクエスト
 			params, reqInf, err := toClient.GetConfigFileParameters("remap.config", reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetConfigFileParameters(remap.config)"))
 			if err != nil {
@@ -752,6 +784,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.ParentConfigParams)
 			}
+
+			// 「/parameters?configFile=parent.config」(GET)ヘのリクエスト
 			parentConfigParams, reqInf, err := toClient.GetConfigFileParameters("parent.config", reqHdr) // TODO make const in lib/go-atscfg
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetConfigFileParameters(parent.config)"))
 			if err != nil {
@@ -777,6 +811,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 			if oldCfg != nil {
 				reqHdr = MakeReqHdr(oldCfg.MetaData.Topologies)
 			}
+
+			// 「/topologies」(GET)ヘのリクエスト
 			topologies, reqInf, err := toClient.GetTopologies(reqHdr)
 			log.Infoln(toreq.RequestInfoStr(reqInf, "GetTopologies"))
 			if err != nil {
@@ -802,6 +838,8 @@ func GetConfigData(toClient *toreq.TOClient, disableProxy bool, cacheHostName st
 		// skip data not needed for reval, if we're reval-only
 		fs = append([]func() error{dsrF, cacheKeyConfigParamsF, remapConfigParamsF, parentConfigParamsF, capsF, dsCapsF, topologiesF}, fs...) // ここで関数定義の配列をfsにセット
 	}
+
+	// この中で宣言された主要な処理となる関数定義はここから並列で開始される
 	errs := runParallel(fs)
 
 	toAddrSet := map[string]struct{}{} // use a set to remove duplicates
