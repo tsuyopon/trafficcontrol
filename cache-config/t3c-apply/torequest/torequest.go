@@ -193,11 +193,14 @@ func NewTrafficOpsReq(cfg config.Cfg) *TrafficOpsReq {
 // checkConfigFile checks and audits config files.
 // The filesAdding parameter is the list of files about to be added, which is needed for verification in case a file is required and about to be created but doesn't exist yet.
 func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) error {
+
+	// 空のファイルが指定された場合にはエラー
 	if cfg.Name == "" {
 		cfg.AuditFailed = true
 		return errors.New("Config file name is empty is empty, skipping further checks.")
 	}
 
+	// 空のディレクトリが指定された場合にはエラー
 	if cfg.Dir == "" {
 		return errors.New("No location information for " + cfg.Name)
 	}
@@ -206,6 +209,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 		return nil
 	}
 
+	// 指定されたディレクトリがmkdirしたり、指定されたuid, gidでchownする。
 	if !util.MkDirWithOwner(cfg.Dir, r.Cfg, &cfg.Uid, &cfg.Gid) {
 		return errors.New("Unable to create the directory '" + cfg.Dir + " for " + "'" + cfg.Name + "'")
 	}
@@ -230,6 +234,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 	}
 
 	// .cer拡張子を持ったファイルがあればX509証明書として妥当かどうかをcheckCert()により検証する
+	// checkCert()はParseCertificate()でX.509フォーマットに一致しているかや有効期限が問題ないかを検証する。
 	if strings.HasSuffix(cfg.Name, ".cer") {
 		if err := checkCert(cfg.Body); err != nil {
 			r.configFileWarnings[cfg.Name] = append(r.configFileWarnings[cfg.Name], fmt.Sprintln(err))
@@ -248,6 +253,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 	cfg.ChangeNeeded = changeNeeded
 	cfg.AuditComplete = true
 
+	// ファイル名が50-ats.rulesの場合にだけはr.processUdevRulesを実行する。
 	if cfg.Name == "50-ats.rules" {
 		err := r.processUdevRules(cfg)
 		if err != nil {
@@ -279,6 +285,7 @@ func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
 		return fmt.Errorf("could not retrieves a statuses list from Traffic Ops: %s\n", err)
 	}
 
+	// ???
 	for f := range statuses {
 		otherStatus := filepath.Join(config.StatusDir, statuses[f])
 		if otherStatus == statusFile {
@@ -294,10 +301,14 @@ func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
 		}
 	}
 
+	// statusFile用のディレクトリを生成して、statusFileに対してtouchする
 	if !r.Cfg.ReportOnly {
+		// statusを配置するディレクトリを生成しておく
 		if !util.MkDir(config.StatusDir, r.Cfg) {
 			return fmt.Errorf("unable to create '%s'\n", config.StatusDir)
 		}
+
+		// statusFileが存在していなければtouchして生成しておく
 		fileExists, _ := util.FileExists(statusFile)
 		if !fileExists {
 			err = util.Touch(statusFile)
@@ -413,6 +424,8 @@ func (r *TrafficOpsReq) processUdevRules(cfg *ConfigFile) error {
 			}
 		}
 	}
+
+	// 「/proc/fs/ext4」をチェックします。ext4でなければエラーになります。
 	fs, err := ioutil.ReadDir("/proc/fs/ext4")
 	if err != nil {
 		log.Errorln("unable to read /proc/fs/ext4, cannot audit disks for filesystem usage.")
@@ -692,7 +705,7 @@ func (r *TrafficOpsReq) PrintWarnings() {
 func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, error) {
 	log.Infoln("Checking revalidate state.")
 
-	// revalの対象外の場合には即座にreturn
+	// 関数の第１引数(sleepOverride)にfalseが指定され、かつ revalの対象外の場合には即座にreturnする
 	if !sleepOverride &&
 		(r.Cfg.ReportOnly || r.Cfg.Files != t3cutil.ApplyFilesFlagReval) { // --report-only=true または 「--files=reval以外」
 		updateStatus := UpdateTropsNotNeeded
@@ -703,6 +716,7 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 	updateStatus := UpdateTropsNotNeeded
 
 	// 下記ではt3c-request --get-data=update-status が実行される
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/servers_hostname_update_status.html
 	serverStatus, err := getUpdateStatus(r.Cfg)
 	if err != nil {
 		log.Errorln("getting update status: " + err.Error())
@@ -711,13 +725,13 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 
 	log.Infof("my status: %s\n", serverStatus.Status)
 
-	// jsonの戻り値として use_reval_pending = falseになっている場合
+	// APIのjsonレスポンスの戻り値として `use_reval_pending=false` が含まれている場合
 	if serverStatus.UseRevalPending == false {
 		log.Errorln("Update URL: Instant invalidate is not enabled.  Separated revalidation requires upgrading to Traffic Ops version 2.2 and enabling this feature.")
 		return UpdateTropsNotNeeded, nil
 	}
 
-	// jsonの戻り値としてrevalPendingがtrueになっているとことを示している
+	// APIのjsonレスポンスの戻り値として `reval_pending=true` が含まれている場合
 	if serverStatus.RevalPending == true {
 		log.Errorln("Traffic Ops is signaling that a revalidation is waiting to be applied.")
 		updateStatus = UpdateTropsNeeded
@@ -754,19 +768,24 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 	updateStatus := UpdateTropsNotNeeded
 	randDispSec := time.Duration(0)
 	log.Debugln("Checking syncds state.")
-	//	if r.Cfg.RunMode == t3cutil.ModeSyncDS || r.Cfg.RunMode == t3cutil.ModeBadAss || r.Cfg.RunMode == t3cutil.ModeReport {
-	if r.Cfg.Files != t3cutil.ApplyFilesFlagReval { // 「--files=revalでない値」が指定された場合
+	//	if r.Cfg.RunMode == t3cutil.ModeSyncDS || r.Cfg.RunMode == t3cutil.ModeBadAss || r.Cfg.RunMode == t3cutil.ModeReport
+	if r.Cfg.Files != t3cutil.ApplyFilesFlagReval { // 「--files=revalでない値」が指定された場合(関数呼び出しの手前でもチェックされるが、関数の中でもチェックされる)
+
+		// t3c-request --get-data=update-status を実行してサーバのステータス情報を取得します
+		// serverStatusオブジェクトには下記APIのレスポンスが格納されます。
+		//   See: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/servers_hostname_update_status.html
 		serverStatus, err := getUpdateStatus(r.Cfg)
 		if err != nil {
 			log.Errorln("getting '" + r.Cfg.CacheHostName + "' update status: " + err.Error())
 			return updateStatus, err
 		}
 
+		// APIレスポンスの`upd_pending`の値によって処理を分岐する。
 		if serverStatus.UpdatePending {
 			updateStatus = UpdateTropsNeeded
 			log.Errorln("Traffic Ops is signaling that an update is waiting to be applied")
 
-			// 取得したレスポンスで 「parent_pending=true」 かつ 「--wait-for-parents=true」 であればparentが更新されたことを待つ
+			// 取得したレスポンスで 「parent_pending=true」 かつ オプションに「--wait-for-parents=true」 が指定されている場合には、parentが更新されたことを待つ
 			if serverStatus.ParentPending && r.Cfg.WaitForParents {
 				log.Errorln("Traffic Ops is signaling that my parents need an update.")
 				// TODO should reval really not sleep?
@@ -777,6 +796,8 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 					if err != nil {
 						return updateStatus, err
 					}
+
+					// APIレスポンスが`parent_pending=true` または `parent_reval_pending=true`の場合には、parent側の処理がまだ完了していないということでまだ処理を実施しない
 					if serverStatus.ParentPending || serverStatus.ParentRevalPending {
 						log.Errorln("My parents still need an update, bailing.")
 						return UpdateTropsNotNeeded, nil
@@ -787,7 +808,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			} else {
 				log.Debugf("Processing with update: Traffic Ops server status %+v config wait-for-parents %+v", serverStatus, r.Cfg.WaitForParents)
 			}
-		} else if !r.Cfg.IgnoreUpdateFlag { // --ignore-update-flag=false
+		} else if !r.Cfg.IgnoreUpdateFlag { // --ignore-update-flag=false が指定された場合
 			log.Errorln("no queued update needs to be applied.  Running revalidation before exiting.")
 			r.RevalidateWhileSleeping()
 			return UpdateTropsNotNeeded, nil
@@ -829,8 +850,10 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 		filesAdding = append(filesAdding, fileName)
 	}
 
+	// r.configFilesはmainのtrops.GetConfigFileList()にてオブジェクト内容が登録される。TrafficOpsから取得・生成したファイルパス情報が含まれている
 	for _, cfg := range r.configFiles {
 		// add service metadata
+		// ファイルパスに含まれる情報からどのサービスかを判断してcfg.Serviceに値を設定する。trafficserver, puppet, system ntpd, unknownがある。
 		if strings.Contains(cfg.Path, "/opt/trafficserver/") || strings.Contains(cfg.Dir, "udev") {
 			cfg.Service = "trafficserver"
 			if !r.Cfg.InstallPackages && !r.IsPackageInstalled("trafficserver") {

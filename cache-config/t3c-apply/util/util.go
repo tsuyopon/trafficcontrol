@@ -147,6 +147,7 @@ func ReadFile(fn string) ([]byte, error) {
 	return data, nil
 }
 
+// 「/usr/bin/service <name> status」を実行して「Active: active」かどうかを判断してサービス状態を応答します。
 func GetServiceStatus(name string) (ServiceStatus, int, error) {
 	var pid int = -1
 	var active bool = false
@@ -177,6 +178,7 @@ func GetServiceStatus(name string) (ServiceStatus, int, error) {
 }
 
 // start or restart the service 'service'. cmd is 'start | restart'
+// GetServiceStatus関数でサービスの起動状態を判断した後に、「/usr/sbin/service <service> start|restart」を実行します。
 func ServiceStart(service string, cmd string) (bool, error) {
 	log.Infof("ServiceStart called for '%s'\n", service)
 	svcStatus, pid, err := GetServiceStatus(service)

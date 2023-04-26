@@ -136,7 +136,8 @@ func Main() int {
 	trops := torequest.NewTrafficOpsReq(cfg)
 
 	// if doing os checks, insure there is a 'systemctl' or 'service' and 'chkconfig' commands.
-	if !cfg.SkipOSCheck && cfg.SvcManagement == config.Unknown { // --skip-os-check=false かつ /bin/shの実行結果がSystemDやSystemVいずれでもないと判断した場合
+	// --skip-os-check=false かつ /bin/shの実行結果がSystemDやSystemVいずれでもないと判断した場合にはエラーログだけ出力させて処理を続行させる
+	if !cfg.SkipOSCheck && cfg.SvcManagement == config.Unknown {
 		log.Errorln("OS checks are enabled and unable to find any know service management tools.")
 	}
 
@@ -236,13 +237,14 @@ func Main() int {
 	}
 
 	log.Debugf("Preparing to fetch the config files for %s, files: %s, syncdsUpdate: %s\n", cfg.CacheHostName, cfg.Files, syncdsUpdate)
-	// 設定ファイルの取得と生成はここで行われている。t3c-generateとファイル情報をオブジェクトにマッピングしている
+	// TrafficOpsからの設定ファイルの取得と生成はここで行われている。t3c-generateとファイル情報をオブジェクトにマッピングしている(その情報はその後のtrops.ProcessConfigFiles()で使われる)
 	err = trops.GetConfigFileList()
 	if err != nil {
 		log.Errorf("Getting config file list: %s\n", err)
 		return GitCommitAndExit(ExitCodeConfigFilesError, FailureExitMsg, cfg)
 	}
 
+	// 手前のtrops.GetConfigFileList()で取得したファイルオブジェクトに対して処理を実施する
 	syncdsUpdate, err = trops.ProcessConfigFiles()
 	if err != nil {
 		log.Errorf("Error while processing config files: %s\n", err.Error())
@@ -252,28 +254,31 @@ func Main() int {
 	// If we've updated also reload remap to reload the plugin and pick up the new database
 	// --maxmind-locationオプションにURLが指定されている場合にフラグが変更される
 	if CheckMaxmindUpdate(cfg) {
-		trops.RemapConfigReload = true
+		trops.RemapConfigReload = true  // このすぐ後にこのフラグが判定に利用される
 	}
 
 	// trops.RemapConfigReloadのフラグはこの上の直前でセットされる
 	if trops.RemapConfigReload == true {
-		// remap.configをtouchする(強制的に時刻を更新している?)
+		// remap.configのパス情報を取得して、そのパスに対してtouchして時刻を更新している。
 		cfg, ok := trops.GetConfigFile("remap.config")
 		_, rc, err := util.ExecCommand("/usr/bin/touch", cfg.Path)
 		if err != nil {
 			log.Errorf("failed to update the remap.config for reloading: %s\n", err.Error())
 		} else if rc == 0 && ok == true {
+			// 正常に終了した場合
 			log.Infoln("updated the remap.config for reloading.")
 		}
 	}
 
+	// --service-action=restart オプションやt3c-check-reloadの実行結果によってtrafficserverを再起動・再読み込み・何もしない・不正かを判断し、
+	// それに従ってtrafficserverを再起動します
 	if err := trops.StartServices(&syncdsUpdate); err != nil {
 		log.Errorln("failed to start services: " + err.Error())
 		return GitCommitAndExit(ExitCodeServicesError, PostConfigFailureExitMsg, cfg)
 	}
 
 	// start 'teakd' if installed.
-	// このパッケージが見当たらない(謎)。
+	// このパッケージがtrafficcontrolで利用されている形跡を見つけることができない。
 	if trops.IsPackageInstalled("teakd") {
 		svcStatus, pid, err := util.GetServiceStatus("teakd")
 		if err != nil {
@@ -303,6 +308,7 @@ func Main() int {
 		log.Errorf("failed to update Traffic Ops: %s\n", err.Error())
 	}
 
+	// ローカルにあるgitにcommitして成功として終了する。
 	return GitCommitAndExit(ExitCodeSuccess, SuccessExitMsg, cfg)
 }
 
