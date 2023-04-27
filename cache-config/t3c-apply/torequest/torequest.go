@@ -267,31 +267,40 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 
 // checkStatusFiles ensures that the cache status files reflect
 // the status retrieved from Traffic Ops.
+// /var/lib/trafficcontrol-cache-config/status/に存在するステータスファイルのステータスに変更があればファイルを変更する
+// この関数の引数で指定されるsvrStatusには「REPORTED」のような次回更新のステータス(--get-data=update-statusで取得した次回更新時のステータスが入る)
 func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
+
+	// 指定されたサーバステータス(svrStatus)の値が空であれば、エラー
 	if svrStatus == "" {
 		return errors.New("Returning; did not find status from Traffic Ops!")
 	} else {
 		log.Debugf("Found %s status from Traffic Ops.\n", svrStatus)
 	}
-	statusFile := filepath.Join(config.StatusDir, svrStatus)
+
+	// statusファイルのパス
+	statusFile := filepath.Join(config.StatusDir, svrStatus)  // 「/var/lib/trafficcontrol-cache-config/status/REPORTED」 のようなファイルパスとなる。
 	fileExists, _ := util.FileExists(statusFile)
 	if !fileExists {
 		log.Errorf("status file %s does not exist.\n", statusFile)
 	}
 
-	// t3c-request --get-data=statuses を実行する
+	// t3c-request --get-data=statuses を実行することで、現行のサーバステータスを取得することができる
 	statuses, err := getStatuses(r.Cfg)
 	if err != nil {
 		return fmt.Errorf("could not retrieves a statuses list from Traffic Ops: %s\n", err)
 	}
 
-	// ???
+	// TODO: rangeで回しているのはいったいなぜか?
 	for f := range statuses {
 		otherStatus := filepath.Join(config.StatusDir, statuses[f])
+		// 次回更新予定のステータスと現状のステータスをによる生成したファイルパスを比較して、同一ならば何もしない
 		if otherStatus == statusFile {
 			continue
 		}
+
 		fileExists, _ := util.FileExists(otherStatus)
+		// --report-only=false かつ 現状のステータス(otherStatus)がtrueならば、ステータスのアップデートがあったとみなして以前の状態ファイル(例: REPORTED)を削除する。
 		if !r.Cfg.ReportOnly && fileExists {
 			log.Errorf("Removing other status file %s that exists\n", otherStatus)
 			err = os.Remove(otherStatus)
@@ -301,14 +310,14 @@ func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
 		}
 	}
 
-	// statusFile用のディレクトリを生成して、statusFileに対してtouchする
+	// --report-only=falseの場合、statusFile用のディレクトリを生成して、statusFileに対してtouchする
 	if !r.Cfg.ReportOnly {
-		// statusを配置するディレクトリを生成しておく
+		// statusを配置するディレクトリ(/var/lib/trafficcontrol-cache-config/status/)を生成しておく
 		if !util.MkDir(config.StatusDir, r.Cfg) {
 			return fmt.Errorf("unable to create '%s'\n", config.StatusDir)
 		}
 
-		// statusFileが存在していなければtouchして生成しておく
+		// statusFileが存在していなければtouchしてstatusFileを生成する。
 		fileExists, _ := util.FileExists(statusFile)
 		if !fileExists {
 			err = util.Touch(statusFile)
@@ -735,7 +744,7 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 	if serverStatus.RevalPending == true {
 		log.Errorln("Traffic Ops is signaling that a revalidation is waiting to be applied.")
 		updateStatus = UpdateTropsNeeded
-		if serverStatus.ParentRevalPending == true {
+		if serverStatus.ParentRevalPending == true { // `parent_reval_pending=true`が含まれている場合
 			if r.Cfg.WaitForParents {
 				log.Infoln("Traffic Ops is signaling that my parents need to revalidate, not revalidating.")
 				updateStatus = UpdateTropsNotNeeded
@@ -744,6 +753,7 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 			}
 		}
 	} else if serverStatus.RevalPending == false && !r.Cfg.ReportOnly && r.Cfg.Files == t3cutil.ApplyFilesFlagReval {
+		// `reval_pending=false` かつ `--report-only=false` かつ `--files=reval` の場合 には更新しない
 		log.Errorln("In revalidate mode, but no update needs to be applied. I'm outta here.")
 		return UpdateTropsNotNeeded, nil
 	} else {
@@ -927,7 +937,8 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 // and determines which need to be installed or removed on the cache.
 func (r *TrafficOpsReq) ProcessPackages() error {
 	log.Infoln("Calling ProcessPackages")
-	// get the package list for this cache from Traffic Ops. (t3c-request --get-data=packagesの実行してTrafficOpsからこのサーバで取得するパッケージリストを取得する)
+	// get the package list for this cache from Traffic Ops. 
+	// t3c-request --get-data=packagesの実行してTrafficOpsからこのサーバで取得するパッケージリストを取得する
 	pkgs, err := getPackages(r.Cfg)
 	if err != nil {
 		return errors.New("getting packages: " + err.Error())
@@ -937,30 +948,39 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 	var install []string   // install package list.
 	var uninstall []string // uninstall package list
 	// loop through the package list to build an install and uninstall list.
+	// t3c-request --get-data=packagesのレスポンスで取得したpkgsに対してrangeでイテレーションする
 	for ii := range pkgs {
 		var instpkg string // installed package
 		var reqpkg string  // required package
 		log.Infof("Processing package %s-%s\n", pkgs[ii].Name, pkgs[ii].Version)
-		// check to see if any package by name is installed.
+		// インストール済みパッケージかどうかをrpmコマンドで確認する。インストール済みならば戻り値のarrに格納される。
 		arr, err := util.PackageInfo("pkg-query", pkgs[ii].Name)
 		if err != nil {
 			return errors.New("PackgeInfo pkg-query: " + err.Error())
 		}
+
 		// go needs the ternary operator :)
+		// インストール済みかどうかを判定し、インストール済みならinstpkg変数にパッケージ名を格納する
+		// arrは1以上は存在することがない。なぜなら、このコードパスのロジックは range pkgsで処理されているので1つのパッケージ毎にしかイテレーションしないため。
 		if len(arr) == 1 {
 			instpkg = arr[0]
 		} else {
 			instpkg = ""
 		}
+
 		// check if the full package version is installed
+		//取得したパッケージ名とバージョンを合わせて変数名を構成する。この変数に入った<パッケージ>+<バージョン>の文字列の値と先ほどrpmで取得したインストール済みの文字列を比較することによって、インストールされているか、更新が必要かの判断を行う。
 		fullPackage := pkgs[ii].Name + "-" + pkgs[ii].Version
 
 		if r.Cfg.InstallPackages {
+
 			if instpkg == fullPackage {
+				// rpmでのパッケージ取得結果とTrafficOpsで取得したパッケージがバージョンも含めて一致する場合
 				log.Infof("%s Currently installed and not marked for removal\n", reqpkg)
 				r.pkgs[fullPackage] = true
 				continue
 			} else if instpkg != "" { // the installed package needs upgrading.
+				// rpmで該当パッケージが取得できたが、TrafficOpsで取得したパッケージがバージョンも含めて一致しない場合には更新対象と判断する
 				log.Infof("%s Currently installed and marked for removal\n", instpkg)
 				uninstall = append(uninstall, instpkg)
 				// the required package needs installing.
@@ -978,7 +998,8 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 						uninstall = append(uninstall, arr[jj])
 					}
 				}
-			} else {
+			} else { 
+				// 「instpkg == ""」の場合にこのelseの分岐に入る。この場合にはシステムに該当パッケージがインストールされていないことを意味しているため、パッケージがインストール対象として追加される。
 				// the required package needs installing.
 				log.Infof("%s is Not installed and is marked for installation.\n", fullPackage)
 				log.Errorf("%s is Not installed and is marked for installation.\n", fullPackage)

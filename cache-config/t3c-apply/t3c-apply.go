@@ -297,6 +297,7 @@ func Main() int {
 
 	// reload sysctl
 	if trops.SysCtlReload == true {
+		// --service-action=restart が指定されている場合には、「sysctl -p」が実行される
 		runSysctl(cfg)
 	}
 

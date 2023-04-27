@@ -130,6 +130,7 @@ const (
 	UseGitInvalid = ""
 )
 
+// 「--git」オプションの解析。auto, yes, noの3つが指定できます。
 func StrToUseGitFlag(str string) UseGitFlag {
 	str = strings.ToLower(strings.TrimSpace(str))
 	switch str {
@@ -310,49 +311,54 @@ If any of the related flags are also set, they override the mode's default behav
 	// But we can't do that until the loggers are initialized.
 	modeLogStrs := []string{}
 	if getopt.IsSet(runModeFlagName) {
+
+		// --run-modeから取得する
 		runMode := t3cutil.StrToMode(*runModePtr)
 		if runMode == t3cutil.ModeInvalid {
 			return Cfg{}, errors.New(*runModePtr + " is an invalid mode.")
 		}
+
+		// 「t3c apply」コマンド実行時の「--run-mode」に指定される値。badass, report, revalidate, syncds, 何もなし(invlid)が存在する。
+		// 指定されたモードによりフラグの制御を行う。
 		switch runMode {
-		case t3cutil.ModeSyncDS:
+		case t3cutil.ModeSyncDS:      // 「--run-mode=syncds」が指定された場合
 			// syncds flags are all the defaults, no need to change anything
-		case t3cutil.ModeRevalidate:
-			if !getopt.IsSet(filesFlagName) {
+		case t3cutil.ModeRevalidate:  // 「--run-mode=revalidate」が指定された場合
+			if !getopt.IsSet(filesFlagName) {           // 「--files」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+filesFlagName+"="+t3cutil.ApplyFilesFlagReval.String())
 				*filesPtr = t3cutil.ApplyFilesFlagReval.String()
 			}
-			if !getopt.IsSet(waitForParentsFlagName) {
+			if !getopt.IsSet(waitForParentsFlagName) {  // 「--wait-for-parents」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+waitForParentsFlagName+"="+"true")
 				*waitForParentsPtr = true
 			}
-		case t3cutil.ModeBadAss:
-			if !getopt.IsSet(serviceActionFlagName) {
+		case t3cutil.ModeBadAss:      // 「--run-mode=badass」が指定された場合
+			if !getopt.IsSet(serviceActionFlagName) {   // 「--service-action」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+serviceActionFlagName+"="+t3cutil.ApplyServiceActionFlagRestart.String())
 				*serviceActionPtr = t3cutil.ApplyServiceActionFlagRestart.String()
 			}
-			if !getopt.IsSet(installPackagesFlagName) {
+			if !getopt.IsSet(installPackagesFlagName) { // 「--install-packages」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+installPackagesFlagName+"="+"true")
 				*installPackagesPtr = true
 			}
-			if !getopt.IsSet(ignoreUpdateFlagName) {
+			if !getopt.IsSet(ignoreUpdateFlagName) {    // 「--ignore-update-flag」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+ignoreUpdateFlagName+"="+"true")
 				*ignoreUpdateFlagPtr = true
 			}
-			if !getopt.IsSet(updateIPAllowFlagName) {
+			if !getopt.IsSet(updateIPAllowFlagName) {   // 「--update-ipallow」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+updateIPAllowFlagName+"="+"true")
 				*updateIPAllowPtr = true
 			}
-		case t3cutil.ModeReport:
-			if !getopt.IsSet(reportOnlyFlagName) {
+		case t3cutil.ModeReport:      // 「--run-mode=report」が指定された場合
+			if !getopt.IsSet(reportOnlyFlagName) {      // 「--report-only」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+reportOnlyFlagName+"="+"true")
 				*reportOnlyPtr = true
 			}
-			if !getopt.IsSet(ignoreUpdateFlagName) {
+			if !getopt.IsSet(ignoreUpdateFlagName) {    // 「--ignore-update-flag」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+ignoreUpdateFlagName+"="+"true")
 				*ignoreUpdateFlagPtr = true
 			}
-			if !getopt.IsSet(silentFlagName) {
+			if !getopt.IsSet(silentFlagName) {          // 「--silent」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+silentFlagName+"="+"true")
 				*silentPtr = true
 			}
