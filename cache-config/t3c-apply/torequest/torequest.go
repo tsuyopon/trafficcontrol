@@ -987,26 +987,38 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 		//取得したパッケージ名とバージョンを合わせて変数名を構成する。この変数に入った<パッケージ>+<バージョン>の文字列の値と先ほどrpmで取得したインストール済みの文字列を比較することによって、インストールされているか、更新が必要かの判断を行う。
 		fullPackage := pkgs[ii].Name + "-" + pkgs[ii].Version
 
+		// --install-packages=trueの場合
 		if r.Cfg.InstallPackages {
 
 			if instpkg == fullPackage {
+
 				// rpmでのパッケージ取得結果とTrafficOpsで取得したパッケージがバージョンも含めて一致する場合
 				log.Infof("%s Currently installed and not marked for removal\n", reqpkg)
 				r.pkgs[fullPackage] = true
 				continue
 			} else if instpkg != "" { // the installed package needs upgrading.
+
 				// rpmで該当パッケージが取得できたが、TrafficOpsで取得したパッケージがバージョンも含めて一致しない場合には更新対象と判断する
+				// 古いバージョンのパッケージは削除対象としてuninstallにappendされる
 				log.Infof("%s Currently installed and marked for removal\n", instpkg)
 				uninstall = append(uninstall, instpkg)
+
 				// the required package needs installing.
+				// 新しいバージョンのパッケージはインストール対象としてinstallにappendされる
 				log.Infof("%s is Not installed and is marked for installation.\n", fullPackage)
 				install = append(install, fullPackage)
+
 				// get a list of packages that depend on this one and mark dependencies
 				// for deletion.
+				// pkg-requiresにより、「rpm -q --whatrequires」により既に依存しているパッケージがあるとのことなのでインストール不要であることがわかる。
+				// この場合にはインストール対象に含めない
 				arr, err = util.PackageInfo("pkg-requires", instpkg)
 				if err != nil {
 					return errors.New("PackgeInfo pkg-requires: " + err.Error())
 				}
+
+				// 「rpm -q --whatrequires」で1件以上でもひっかかればそのパッケージはすでに利用されていることになるので、インストールしないようにする。
+				// TODO: ただ、この場合には、すでに 「if instpkg == fullPackage」の後のelse ifの処理なので指定されたバージョンのパッケージが入っているわけではないと思うが問題ないのか?
 				if len(arr) > 0 {
 					for jj := range arr {
 						log.Infof("%s is Currently installed and depends on %s and needs to be removed.", arr[jj], instpkg)
@@ -1020,16 +1032,20 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 				log.Errorf("%s is Not installed and is marked for installation.\n", fullPackage)
 				install = append(install, fullPackage)
 			}
-		} else {
+		} else { // --install-packages=falseの場合にはインストールはされない。ただログを出すだけ
+
 			// Only check if packages exist and complain if they are wrong.
 			if instpkg == fullPackage {
+				// 既にパッケージの対象バージョンがインストールされている場合
 				log.Infof("%s Currently installed.\n", reqpkg)
 				r.pkgs[fullPackage] = true
 				continue
 			} else if instpkg != "" { // the installed package needs upgrading.
+				// パッケージのアップデートが必要な場合
 				log.Errorf("%s Wrong version currently installed.\n", instpkg)
 				r.pkgs[instpkg] = true
 			} else {
+				// システムにパッケージがインストールされていない場合
 				// the required package needs installing.
 				log.Errorf("%s is Not installed.\n", fullPackage)
 			}
@@ -1045,19 +1061,25 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 		log.Errorf("number of packages requiring removal: %d\n", len(uninstall))
 	}
 
+	// --install-packages=trueの場合
 	if r.Cfg.InstallPackages {
+
+		// インストールした数
 		log.Debugf("number of packages requiring installation: %d\n", len(install))
 		if r.Cfg.ReportOnly {
 			log.Errorf("number of packages requiring installation: %d\n", len(install))
 		}
+
+		// 依存でパッケージがインストールされていたので、インストールしなかった対象の数
 		log.Debugf("number of packages requiring removal: %d\n", len(uninstall))
 		if r.Cfg.ReportOnly {
 			log.Errorf("number of packages requiring removal: %d\n", len(uninstall))
 		}
 
+		// インストール数が1件以上でも存在する場合
 		if len(install) > 0 {
 			for ii := range install {
-				result, err := util.PackageAction("info", install[ii])    // 指定されたパッケージのyum infoを実施する
+				result, err := util.PackageAction("info", install[ii])    // 指定されたパッケージのyum infoを実施し、失敗したらエラーにする
 				if err != nil || result != true {
 					return errors.New("Package " + install[ii] + " is not available to install: " + err.Error())
 				}
@@ -1065,7 +1087,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 			log.Infoln("All packages available.. proceding..")
 
 			// uninstall packages marked for removal
-			if len(install) > 0 && r.Cfg.InstallPackages {  // --install-packages=trueの場合
+			if len(install) > 0 && r.Cfg.InstallPackages {                // --install-packages=trueの場合
 				for jj := range uninstall {
 					log.Infof("Uninstalling %s\n", uninstall[jj])
 					r, err := util.PackageAction("remove", uninstall[jj]) // 指定されたパッケージのyum removeを実施する
