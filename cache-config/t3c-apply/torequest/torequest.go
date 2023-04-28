@@ -192,6 +192,7 @@ func NewTrafficOpsReq(cfg config.Cfg) *TrafficOpsReq {
 
 // checkConfigFile checks and audits config files.
 // The filesAdding parameter is the list of files about to be added, which is needed for verification in case a file is required and about to be created but doesn't exist yet.
+// ファイル毎にこの関数が呼び出されます。呼び出し元ではこの関数はrangeでイテレーションして呼ばれています。
 func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) error {
 
 	// 空のファイルが指定された場合にはエラー
@@ -244,7 +245,7 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 		}
 	}
 
-	// t3c-diffを実行する
+	// t3c-diffにファイルを指定することで、その設定ファイルの差分情報をTrafficOps APIから取得する
 	changeNeeded, err := diff(r.Cfg, cfg.Body, cfg.Path, r.Cfg.ReportOnly, cfg.Perm, cfg.Uid, cfg.Gid)
 
 	if err != nil {
@@ -330,6 +331,7 @@ func (r *TrafficOpsReq) checkStatusFiles(svrStatus string) error {
 }
 
 // processRemapOverrides processes remap overrides found from Traffic Ops.
+// 呼び出し元を確認した際にcfgには「remap.config」の値しか含まれない
 func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 	from := ""
 	newlines := []string{}
@@ -339,8 +341,11 @@ func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 	overrides := map[string]int{}
 	data := cfg.Body
 
+	// remap.configの中身(cfg.Body)が0byte以上の場合に処理を行う
 	if len(data) > 0 {
+
 		lines := strings.Split(string(data), "\n")
+		// 改行毎に処理を行う
 		for ii := range lines {
 			str := lines[ii]
 			fields := strings.Fields(str)
@@ -353,6 +358,7 @@ func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 			_, ok := overrides[from]
 			if ok == true { // check if this line should be overriden
 				// see. https://github.com/apache/trafficcontrol/blob/master/docs/source/admin/traffic_server.rst
+				// https://traffic-control-cdn.readthedocs.io/en/latest/admin/traffic_server.html#remap-override
 				newstr := "##OVERRIDDEN## " + str
 				newlines = append(newlines, newstr)
 				overridenCount++
@@ -372,6 +378,8 @@ func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 	} else {
 		return errors.New("The " + cfg.Name + " file is empty, nothing to process.")
 	}
+
+	// 「##OVERRIDE##」の数が存在すれば
 	if overrideCount > 0 {
 		log.Infof("Overrode %d old remap rule(s) with %d new remap rule(s).\n",
 			overridenCount, overrideCount)
@@ -389,6 +397,7 @@ func (r *TrafficOpsReq) processRemapOverrides(cfg *ConfigFile) error {
 }
 
 // processUdevRules verifies disk drive device ownership and mode
+// TBD: 確認したい
 func (r *TrafficOpsReq) processUdevRules(cfg *ConfigFile) error {
 	var udevDevices map[string]string
 
@@ -565,7 +574,9 @@ func (r *TrafficOpsReq) CheckSystemServices() error {
 		level := []string{}
 		enabled := false
 		for jj := range arrv {
+			// 「3:on」のように左にレベル、右に「on」といった文字列が入る模様
 			nv := strings.Split(arrv[jj], ":")
+			// onが指定されていたら、ランレベルをlevelに、有効にするかどうかのフラグをenabledに保存します。
 			if len(nv) == 2 && strings.Contains(nv[1], "on") {
 				level = append(level, nv[0])
 				enabled = true
@@ -761,6 +772,7 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 		return UpdateTropsNotNeeded, nil
 	}
 
+	// /var/lib/trafficcontrol-cache-config/status/に存在するステータスファイル(REPORTED等)のステータスに変更があれば該当ステータスのファイルを作成する。古いステータスファイルは削除する。
 	err = r.checkStatusFiles(serverStatus.Status)
 	if err != nil {
 		log.Errorln(errors.New("checking status files: " + err.Error()))
@@ -775,9 +787,11 @@ func (r *TrafficOpsReq) CheckRevalidateState(sleepOverride bool) (UpdateStatus, 
 // CheckSYncDSState retrieves and returns the DS Update status from Traffic Ops.
 // 「--files=reval」の場合にはこのロジックのif文のメイン処理は通らないので「--files=all」の時だけだと思われる。
 func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
+
 	updateStatus := UpdateTropsNotNeeded
 	randDispSec := time.Duration(0)
 	log.Debugln("Checking syncds state.")
+
 	//	if r.Cfg.RunMode == t3cutil.ModeSyncDS || r.Cfg.RunMode == t3cutil.ModeBadAss || r.Cfg.RunMode == t3cutil.ModeReport
 	if r.Cfg.Files != t3cutil.ApplyFilesFlagReval { // 「--files=revalでない値」が指定された場合(関数呼び出しの手前でもチェックされるが、関数の中でもチェックされる)
 
@@ -790,7 +804,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			return updateStatus, err
 		}
 
-		// APIレスポンスの`upd_pending`の値によって処理を分岐する。
+		// APIレスポンスの`upd_pending=true`の値によって処理を分岐する。
 		if serverStatus.UpdatePending {
 			updateStatus = UpdateTropsNeeded
 			log.Errorln("Traffic Ops is signaling that an update is waiting to be applied")
@@ -799,7 +813,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			if serverStatus.ParentPending && r.Cfg.WaitForParents {
 				log.Errorln("Traffic Ops is signaling that my parents need an update.")
 				// TODO should reval really not sleep?
-				// 「--report-only=false」 かつ 「--files=revalでない値」 が指定された場合
+				// 「--report-only=false」 かつ 「--files=revalでない値」 が指定された場合 (--files=revalのチェックは呼び出し元でチェックしているがここでも実施している)
 				if !r.Cfg.ReportOnly && r.Cfg.Files != t3cutil.ApplyFilesFlagReval {
 					log.Infof("sleeping for %ds to see if the update my parents need is cleared.", randDispSec/time.Second)
 					serverStatus, err = getUpdateStatus(r.Cfg)
@@ -818,7 +832,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			} else {
 				log.Debugf("Processing with update: Traffic Ops server status %+v config wait-for-parents %+v", serverStatus, r.Cfg.WaitForParents)
 			}
-		} else if !r.Cfg.IgnoreUpdateFlag { // --ignore-update-flag=false が指定された場合
+		} else if !r.Cfg.IgnoreUpdateFlag { // `upd_pending=false` かつ --ignore-update-flag=false が指定された場合
 			log.Errorln("no queued update needs to be applied.  Running revalidation before exiting.")
 			r.RevalidateWhileSleeping()
 			return UpdateTropsNotNeeded, nil
@@ -832,6 +846,7 @@ func (r *TrafficOpsReq) CheckSyncDSState() (UpdateStatus, error) {
 			log.Errorln(err)
 		}
 	}
+
 	return updateStatus, nil
 }
 
@@ -863,7 +878,7 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 	// r.configFilesはmainのtrops.GetConfigFileList()にてオブジェクト内容が登録される。TrafficOpsから取得・生成したファイルパス情報が含まれている
 	for _, cfg := range r.configFiles {
 		// add service metadata
-		// ファイルパスに含まれる情報からどのサービスかを判断してcfg.Serviceに値を設定する。trafficserver, puppet, system ntpd, unknownがある。
+		// ファイルパスに含まれる情報からどのサービスかを判断してcfg.Serviceに値を設定する。trafficserver, puppet, system ntpd, unknownがある。 ログへの出力にしか使われてなさそう。
 		if strings.Contains(cfg.Path, "/opt/trafficserver/") || strings.Contains(cfg.Dir, "udev") {
 			cfg.Service = "trafficserver"
 			if !r.Cfg.InstallPackages && !r.IsPackageInstalled("trafficserver") {
@@ -1089,10 +1104,13 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 }
 
 func (r *TrafficOpsReq) RevalidateWhileSleeping() (UpdateStatus, error) {
+
 	updateStatus, err := r.CheckRevalidateState(true)
 	if err != nil {
 		return updateStatus, err
 	}
+
+	// UpdateTropsNotNeeded = 0なので、それ以外のケースだと下記が実行される。
 	if updateStatus != 0 {
 		r.Cfg.Files = t3cutil.ApplyFilesFlagReval
 		// TODO verify? This is for revalidating after a syncds, so we probably do want to wait for parents here, and users probably don't for the main syncds run. But, this feels surprising.
@@ -1128,6 +1146,7 @@ func (r *TrafficOpsReq) RevalidateWhileSleeping() (UpdateStatus, error) {
 // Returns nil on success or any error.
 func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 	serviceNeeds := t3cutil.ServiceNeedsNothing
+
 	if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart
 		// --service-action=restartの場合には、再起動させるようにする
 		serviceNeeds = t3cutil.ServiceNeedsRestart
@@ -1171,79 +1190,110 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 			log.Errorln("ATS configuration has changed. 'traffic_ctl config reload' needs to be run")
 		}
 		return nil
-	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart
+	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart が指定されている場合
+
+		// デフォルトは「restart」
 		startStr := "restart"
+
+		// サービスが起動していなければ「start」オプションを指定
 		if svcStatus != util.SvcRunning {
 			startStr = "start"
 		}
+
+		// ここでtrafficserverサービスのstartやrestartが行われる
 		if _, err := util.ServiceStart("trafficserver", startStr); err != nil {
 			return errors.New("failed to restart trafficserver")
 		}
 		log.Infoln("trafficserver has been " + startStr + "ed")
+
+		// syncdsUpdate中の「UpdateTropsNeeded」の値は「UpdateTropsSuccessful」に変更する
 		if *syncdsUpdate == UpdateTropsNeeded {
 			*syncdsUpdate = UpdateTropsSuccessful
 		}
 		return nil // we restarted, so no need to reload
-	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagReload {
+
+	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagReload { // 「--service-action=reload」が指定された場合
 		if serviceNeeds == t3cutil.ServiceNeedsRestart {
+			// reload(--service-action=reload)オプションが指定しているにもかかわらず、サービスとしてはrestartを必要とする場合にはエラーログを吐いておく
+
+			// syncdsUpdate中の「UpdateTropsNeeded」の値は「UpdateTropsSuccessful」に変更する
 			if *syncdsUpdate == UpdateTropsNeeded {
 				*syncdsUpdate = UpdateTropsSuccessful
 			}
 			log.Errorln("ATS configuration has changed.  The new config will be picked up the next time ATS is started.")
+
 		} else if serviceNeeds == t3cutil.ServiceNeedsReload {
+
 			log.Infoln("ATS configuration has changed, Running 'traffic_ctl config reload' now.")
+
+			// 「traffic_ctl config reload」が実行される
 			if _, _, err := util.ExecCommand(config.TSHome+config.TrafficCtl, "config", "reload"); err != nil {
 				if *syncdsUpdate == UpdateTropsNeeded {
 					*syncdsUpdate = UpdateTropsFailed
 				}
 				return errors.New("ATS configuration has changed and 'traffic_ctl config reload' failed, check ATS logs: " + err.Error())
 			}
+
+			// syncdsUpdate中の「UpdateTropsNeeded」の値は「UpdateTropsSuccessful」に変更する
 			if *syncdsUpdate == UpdateTropsNeeded {
 				*syncdsUpdate = UpdateTropsSuccessful
 			}
 			log.Infoln("ATS 'traffic_ctl config reload' was successful")
 		}
+
+		// syncdsUpdate中の「UpdateTropsNeeded」の値は「UpdateTropsSuccessful」に変更する
 		if *syncdsUpdate == UpdateTropsNeeded {
 			*syncdsUpdate = UpdateTropsSuccessful
 		}
+
 		return nil
 	}
+
 	return nil
 }
 
+// 関数の引数で更新後のステータスを受け取り、「t3c-request --get-data=update-status」の結果を再取得して取得ステータスと実際の処理で乖離していたらログを出す。
+// その後、t3c applyにより設定が更新された場合にはsendUpdate()によってt3c-updateが実行され、TrafficOps APIへのステータスの更新リクエストされます。
 func (r *TrafficOpsReq) UpdateTrafficOps(syncdsUpdate *UpdateStatus) error {
 	var performUpdate bool
 
+	// t3c-request --get-data=update-statusを実行して更新後のステータスを取得する
 	serverStatus, err := getUpdateStatus(r.Cfg)
 	if err != nil {
 		return errors.New("failed to update Traffic Ops: " + err.Error())
 	}
 
 	if *syncdsUpdate == UpdateTropsNotNeeded && (serverStatus.UpdatePending == true || serverStatus.RevalPending == true) {
+		// case1: TrafficOpsで更新不要と判断(UpdateTropsNotNeeded) かつ ( `upd_pending=true` または `reval_pending=true` )の場合
 		performUpdate = true
 		log.Errorln("Traffic Ops is signaling that an update is ready to be applied but, none was found! Clearing update state in Traffic Ops anyway.")
 	} else if *syncdsUpdate == UpdateTropsNotNeeded {
+		// case2: TrafficOpsで更新不要と判断(UpdateTropsNotNeeded)
 		log.Errorln("Traffic Ops does not require an update at this time")
 		return nil
 	} else if *syncdsUpdate == UpdateTropsFailed {
+		// case3: 更新処理に失敗した場合
 		log.Errorln("Traffic Ops requires an update but, applying the update locally failed.  Traffic Ops is not being updated.")
 		return nil
 	} else if *syncdsUpdate == UpdateTropsSuccessful {
+		// case4: 更新処理に成功した場合
 		performUpdate = true
 		log.Errorln("Traffic Ops requires an update and it was applied successfully.  Clearing update state in Traffic Ops.")
 	}
 
+	// 上記のcase1からcase4のどの遷移にも入らなかった場合にこの遷移に入る
 	if !performUpdate {
 		return nil
 	}
+
 	if r.Cfg.ReportOnly {
 		log.Errorln("In Report mode and Traffic Ops needs updated you should probably do that manually.")
 		return nil
 	}
 
 	// TODO: The boolean flags/representation can be removed after ATC (v7.0+)
-	// sendUpdateの中でTrafficOpsに対してserverStatusの更新処理を行う(実際にはt3c-updateが実行される)
-	if !r.Cfg.ReportOnly && !r.Cfg.NoUnsetUpdateFlag {
+	// sendUpdate()の中でTrafficOpsに対してserverStatusの更新処理を行う(実際にはt3c-updateが実行される)
+	if !r.Cfg.ReportOnly && !r.Cfg.NoUnsetUpdateFlag {  // --report-only=false かつ --no-unset-update-flag=false
 		if r.Cfg.Files == t3cutil.ApplyFilesFlagAll { // --files=all
 			b := false
 			err = sendUpdate(r.Cfg, serverStatus.ConfigUpdateTime, nil, &b, nil)

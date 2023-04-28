@@ -83,6 +83,7 @@ func main() {
 // This is a separate function so defer statements behave as-expected.
 // DO NOT call os.Exit within this function; return the code instead.
 // Returns the application exit code.
+// t3c-applyは「t3c apply」コマンドから呼ばれます。
 func Main() int {
 	var syncdsUpdate torequest.UpdateStatus
 	var lock util.FileLock
@@ -142,6 +143,7 @@ func Main() int {
 	}
 
 	// create and clean the config.TmpBase (/tmp/ort)
+	// 下記では結局、MkDirして、その後CleanTmpDirを実行します。
 	// /tmp/trafficcontrol-cache-configを適切な権限・オーナーで生成します。
 	if !util.MkDir(config.TmpBase, cfg) {
 		log.Errorln("mkdir TmpBase '" + config.TmpBase + "' failed, cannot continue")
@@ -157,7 +159,6 @@ func Main() int {
 
 	// 実行プロセスがrootユーザーであることのチェックを行う(restartやreloadが必要となるため)
 	if !util.CheckUser(cfg) {
-
 		lock.Unlock()
 		return ExitCodeUserCheckError
 	}
@@ -165,32 +166,44 @@ func Main() int {
 	// if running in Revalidate mode, check to see if it's
 	// necessary to continue
 	// filesにrevalモードが指定されている場合の処理
-	if cfg.Files == t3cutil.ApplyFilesFlagReval { // --files=reval
+	if cfg.Files == t3cutil.ApplyFilesFlagReval { // --files=revalの場合
+
+		// TrafficOpsから変更後のステータス(--get-data=update-status)と変更前の現状ステータス(--get-data=statuses)をそれぞれ取得して、
+		// ステータスに変更があれば、/var/lib/trafficcontrol-cache-config/status/<status> のファイルを作成する(古いステータスファイルは削除する)
 		syncdsUpdate, err = trops.CheckRevalidateState(false)
 
 		if err != nil {
 			log.Errorln("Checking revalidate state: " + err.Error())
 			return GitCommitAndExit(ExitCodeRevalidationError, FailureExitMsg, cfg)
 		}
+
 		if syncdsUpdate == torequest.UpdateTropsNotNeeded {
 			log.Infoln("Checking revalidate state: returned UpdateTropsNotNeeded")
 			return GitCommitAndExit(ExitCodeRevalidationError, SuccessExitMsg, cfg)
 		}
 
-	} else {
+	} else {  // --files=allの場合
+
 		// 下記ではTrafficOpsからステータスを取得した後に、その結果がPendingステータスの場合に再度ステータスを取得するために(t3c-request)が実行される
+		// DSはDelivery Serviceである。
 		syncdsUpdate, err = trops.CheckSyncDSState()
 		if err != nil {
 			log.Errorln("Checking syncds state: " + err.Error())
 			return GitCommitAndExit(ExitCodeSyncDSError, FailureExitMsg, cfg)
 		}
-		if !cfg.IgnoreUpdateFlag && cfg.Files == t3cutil.ApplyFilesFlagAll && syncdsUpdate == torequest.UpdateTropsNotNeeded { // --ignore-update-flag=false --files=all + UpdateTropsNotNeeded
+
+		// --ignore-update-flag=false --files=all + UpdateTropsNotNeeded の場合
+		if !cfg.IgnoreUpdateFlag && cfg.Files == t3cutil.ApplyFilesFlagAll && syncdsUpdate == torequest.UpdateTropsNotNeeded {
+
 			// If touching remap.config fails, we want to still try to restart services
 			// But log a critical-post-config-failure, which needs logged right before exit.
 			postConfigFail := false
+
 			// check for maxmind db updates even if we have no other updates
 			// オプションでmaxmind-locationのURLが指定されている場合には下記で処理が実行される
 			if CheckMaxmindUpdate(cfg) {
+
+				// remap.configをtouchして更新しておく
 				// We updated the db so we should touch and reload
 				trops.RemapConfigReload = true
 				path := cfg.TsConfigDir + "/remap.config"
@@ -201,15 +214,21 @@ func Main() int {
 				} else if rc == 0 {
 					log.Infoln("updated the remap.config for reloading.")
 				}
+
+				// TBD: このケースはUpdateTropsNotNeededで更新不要なのになぜ再起動を行う必要があるのか? -> 指定されたオプションで再起動を常にしたいような場合なのか?
+				// trafficserverの起動をおこなっておく
 				if err := trops.StartServices(&syncdsUpdate); err != nil {
 					log.Errorln("failed to start services: " + err.Error())
 					return GitCommitAndExit(ExitCodeServicesError, PostConfigFailureExitMsg, cfg)
 				}
+
 			}
 			finalMsg := SuccessExitMsg
 			if postConfigFail {
 				finalMsg = PostConfigFailureExitMsg
 			}
+
+			// このケースのコードパスの場合にはここでreturnしてmainが正常終了する
 			return GitCommitAndExit(ExitCodeSuccess, finalMsg, cfg)
 		}
 	}
@@ -237,6 +256,8 @@ func Main() int {
 	}
 
 	log.Debugf("Preparing to fetch the config files for %s, files: %s, syncdsUpdate: %s\n", cfg.CacheHostName, cfg.Files, syncdsUpdate)
+
+	// TBD: CheckSyncDSState -> GetConfigFileList経由でgenerate()が実行されているが、それと何が違うのか? 2度呼ばれることにならないのか。
 	// TrafficOpsからの設定ファイルの取得と生成はここで行われている。t3c-generateとファイル情報をオブジェクトにマッピングしている(その情報はその後のtrops.ProcessConfigFiles()で使われる)
 	err = trops.GetConfigFileList()
 	if err != nil {
@@ -253,7 +274,7 @@ func Main() int {
 	// check for maxmind db updates
 	// If we've updated also reload remap to reload the plugin and pick up the new database
 	// --maxmind-locationオプションにURLが指定されている場合にフラグが変更される
-	if CheckMaxmindUpdate(cfg) {
+	if CheckMaxmindUpdate(cfg) {        // CheckMaxmindUpdate()の中で対象URLにヘッドリクエストして200ならcurl取得、gzip展開、保存をし、304ならばローカルファイルを更新する。
 		trops.RemapConfigReload = true  // このすぐ後にこのフラグが判定に利用される
 	}
 
@@ -301,7 +322,7 @@ func Main() int {
 		runSysctl(cfg)
 	}
 
-	// configFileWarningsがあればここで表示する
+	// r.configFileWarningsに登録されている内容があればここで表示する ( GetConfigFileList()関数内のgenerate()後にこの値が詰められそう)
 	trops.PrintWarnings()
 
 	// TrafficOps APIに対してserverStatusの更新処理を行う
@@ -328,6 +349,7 @@ func LogPanic(f func() int) (exitCode int) {
 // GitCommitAndExit attempts to git commit all changes, and logs any error.
 // It then logs exitMsg at the Info level, and returns exitCode.
 // This is a helper function, to reduce the duplicated commit-log-return into a single line.
+// サーバ内部のローカルのgitにコミットする(これによって履歴として確認できるようになる)
 func GitCommitAndExit(exitCode int, exitMsg string, cfg config.Cfg) int {
 	success := exitCode == ExitCodeSuccess
 	if cfg.UseGit == config.UseGitYes || cfg.UseGit == config.UseGitAuto {

@@ -138,7 +138,8 @@ func preprocess(cfg config.Cfg, configData []byte, generatedFiles []byte) ([]byt
 		return nil, errors.New("starting command: " + err.Error())
 	}
 
-	// t3c-preprocessに標準入力で渡す文字列は下記で書き込みを行います。
+	// t3c-preprocessに標準入力で渡す文字列は下記で書き込みを行います。 標準入力は下記形式です。
+	// {"data": <configData>, "files:" <generatedFiles> }
 	if _, err := stdinPipe.Write([]byte(`{"data":`)); err != nil {
 		return nil, errors.New("writing opening json to input: " + err.Error())
 	} else if _, err := stdinPipe.Write(configData); err != nil {
@@ -170,6 +171,8 @@ func preprocess(cfg config.Cfg, configData []byte, generatedFiles []byte) ([]byt
 		return nil, fmt.Errorf("t3c-preprocess returned non-zero exit code %v, see log for output", code)
 	}
 	logSubApp(`t3c-preprocess`, stdErr)
+
+	// 出力結果をreturnする
 	return stdOut, nil
 }
 
@@ -234,17 +237,23 @@ func sendUpdate(cfg config.Cfg, configApplyTime, revalApplyTime *time.Time, conf
 		"--cache-host-name=" + cfg.CacheHostName,
 	}
 
+	// sendUpdateの呼び出し元では、`--files=all`の場合にはconfigApplyTimeが指定される。`--files=reval`の場合にはnilが指定される
 	if configApplyTime != nil {
 		args = append(args, "--set-config-apply-time="+(*configApplyTime).Format(time.RFC3339Nano))
 	}
+
+	// sendUpdateの呼び出し元では、`--files=reval`の場合にはrevalApplyTimeが指定される。`--files=all`の場合にはnilが指定される
 	if revalApplyTime != nil {
 		args = append(args, "--set-reval-apply-time="+(*revalApplyTime).Format(time.RFC3339Nano))
 	}
 
 	// *** Compatability requirement until ATC (v7.0+) is deployed with the timestamp features
+	// `--files=all`の場合にはconfigApplyBoolが指定される。`--files=reval`の場合にはnilが指定される
 	if configApplyBool != nil {
 		args = append(args, "--set-update-status="+strconv.FormatBool(*configApplyBool))
 	}
+
+	// `--files=refval`の場合にはrevalApplyBoolが指定される。`--files=all`の場合にはnilが指定される
 	if revalApplyBool != nil {
 		args = append(args, "--set-reval-status="+strconv.FormatBool(*revalApplyBool))
 	}
@@ -270,6 +279,8 @@ func sendUpdate(cfg config.Cfg, configApplyTime, revalApplyTime *time.Time, conf
 	if _, used := os.LookupEnv("TO_URL"); !used {
 		args = append(args, "--traffic-ops-url="+cfg.TOURL)
 	}
+
+	// ここで t3c-updateを呼び出しTrafficOps APIにリクエストしてステータスを更新させる
 	stdOut, stdErr, code := t3cutil.Do(`t3c-update`, args...)
 	if code != 0 {
 		logSubAppErr(`t3c-update stdout`, stdOut)
@@ -350,6 +361,7 @@ func checkRefs(cfg config.Cfg, cfgFile []byte, filesAdding []string) error {
 		args = append(args, "-v")
 	}
 
+	// t3c-check-refを呼び出して、指定したファイルのフォーマットが正しいことを検証する
 	stdOut, stdErr, code := t3cutil.DoInput(cfgFile, `t3c`, args...)
 
 	if code != 0 {

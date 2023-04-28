@@ -181,12 +181,15 @@ func GetServiceStatus(name string) (ServiceStatus, int, error) {
 // GetServiceStatus関数でサービスの起動状態を判断した後に、「/usr/sbin/service <service> start|restart」を実行します。
 func ServiceStart(service string, cmd string) (bool, error) {
 	log.Infof("ServiceStart called for '%s'\n", service)
+	// 「/usr/sbin/serivce <name> status」によりその状態のサービスを取得する
 	svcStatus, pid, err := GetServiceStatus(service)
 	if err != nil {
 		return false, errors.New("Could not get status for '" + service + "' : " + err.Error())
 	} else if svcStatus == SvcRunning && cmd == "start" {
 		log.Infof("service '%s' is already running, pid: %d\n", service, pid)
 	} else {
+		// サービスの起動や再起動を行う
+		// 例えば、serviceには「trafficserver」、cmdには「start」、「restart」などが指定されます。
 		_, rc, err := ExecCommand("/usr/sbin/service", service, cmd)
 		if err != nil {
 			return false, errors.New("Could not " + cmd + " the '" + service + "' service: " + err.Error())
@@ -495,6 +498,8 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 		return false
 	}
 
+	// 先ほど取得したファイルのtimestampが取得できたならば既にローカルにファイルがあるので、その時刻をIf-Moified-Sinceヘッダに付与
+	// これにより更新があった場合だけ取得する様にする。
 	if code == 0 {
 		req.Header.Add("If-Modified-Since", strings.TrimSpace(string(stdOut)))
 	}
@@ -511,6 +516,8 @@ func UpdateMaxmind(cfg config.Cfg) bool {
 	}
 
 	// If we have a 304 then update the timestamp on the file on disk.
+	// 304が帰ってきているということは、ローカルのファイルに更新がなかったことを表している。
+	// よってファイルのタイムスタンプを Last-Modified ヘッダの Dateの値で更新時刻を置き換える。
 	if resp.StatusCode == 304 {
 		dateStr := resp.Header.Get("Last-Modified")
 		if dateStr == "" {

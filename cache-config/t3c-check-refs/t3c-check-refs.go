@@ -213,15 +213,19 @@ func fileExists(filename string) bool {
 // read the names of all available plugins in the
 // installed trafficservers plugin directory.
 func loadAvailablePlugins() {
+
+	// trafficserverプラグインのディレクトリに存在するファイルを取得する
 	files, err := ioutil.ReadDir(cfg.TrafficServerPluginDir)
 	if err != nil {
 		log.Errorf("%v\n", err)
 		os.Exit(1)
 	}
 
+	// trafficserverプラグインのディレクトリに存在するファイルで「.so」のsuffixを持つものが存在する場合には配列atsPlugins[file]にフラグを立てる
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), ".so") {
 			log.Debugf("loaded plugin %s\n", file.Name())
+			// TODO: 要確認。この配列使ってなさそう?
 			atsPlugins[file.Name()] = 1
 		}
 	}

@@ -184,6 +184,9 @@ func DoInput(input []byte, cmdStr string, args ...string) ([]byte, []byte, int) 
 
 	cmd.Stdout = &outbuf
 	cmd.Stderr = &errbuf
+
+
+	// 下記はt3c-check-refsに渡すファイルの中身(body)が標準入力( < file 相当)として渡されます
 	cmd.Stdin = bytes.NewBuffer(input)
 
 	code := 0
