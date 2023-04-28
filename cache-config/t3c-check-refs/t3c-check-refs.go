@@ -106,6 +106,8 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 						verified = verifyPlugin(key)
 						pluginChecks[key] = verified
 					}
+
+					// 検証に失敗
 					if !verified {
 						log.Errorf("the plugin '%s' in remap.config on line '%d' is not available to the installed trafficserver\n",
 							key, lineNumber)
@@ -125,7 +127,7 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 				// @pparam=xxxx.txtのようになっているので"="でセパレートする
 				sa := strings.Split(fields[ii], "=")
 
-				// @pparam=xxxx のフィールド群が=でセパレートした場合に2つか3つで分けられない場合にはエラーを表示する ( @plugin=xxx.so や @pparam=--static-prefix=hoge.jp )
+				// @pparam=xxxx のフィールド群が=でセパレートした場合に2つか3つで分けられない場合にはエラーを表示する ( @plugin=xxx.so や @pparam=--static-prefix=hoge.jp のケースがあるので2か3)
 				if len(sa) != 2 && len(sa) != 3 {
 					log.Errorf("malformed @pparam definition in remap.config on line '%d': %v\n", lineNumber, fields)
 					pluginErrorCount++
@@ -139,6 +141,8 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 							verified = verifyPluginConfigfile(param, filesAdding)
 							pluginParams[param] = verified
 						}
+
+						// 検証に失敗した場合
 						if !verified {
 							log.Errorf("the plugin config file '%s' on line '%d' of remap.config does not exist or is empty\n",
 								param, lineNumber)
@@ -164,6 +168,8 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 				verified = verifyPlugin(key)
 				pluginChecks[key] = verified
 			}
+
+			// 検証に失敗した場合
 			if !verified {
 				log.Errorf("the plugin '%s' on line '%d' of plugin.config is not available to the the installed trafficserver\n",
 					key, lineNumber)
@@ -172,6 +178,7 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 				log.Infof("the plugin '%s' on line '%d' of plugin.config has been verified\n", key, lineNumber)
 			}
 		}
+
 		// Check the arguments in a plugin.config file for possible plugin config files.
 		// Any plugin argument that ends in '.config | .cfg | .txt | .yml | .yaml' are
 		// assumed to be configuration files and are checked that they
@@ -249,10 +256,12 @@ func verifyPluginConfigfile(filename string, filesAdding map[string]struct{}) bo
 // returns plugin is verified (filename exists), 'true' or 'false'
 func verifyPlugin(filename string) bool {
 
+	// suffixに.soを持つかどうかを検証する
 	if !strings.HasSuffix(filename, ".so") {
 		return false
 	}
 
+	// ファイルが絶対パスであることを検証する
 	if filepath.IsAbs(filename) {
 		return fileExists(filename)
 	} else {
@@ -260,7 +269,9 @@ func verifyPlugin(filename string) bool {
 	}
 }
 
-// このt3c-check-refsはplugin.configとremap.configの2つのファイルだけ呼ばれる可能性があります。呼び出し元でこの制御が行われています。
+// t3c-checkからこのバイナリが呼ばれます
+// このバイナリが呼ばれる際に検証したいファイル情報は標準入力として渡ってきます。
+// なお、このt3c-check-refsはplugin.configとremap.configの2つのファイルだけ呼ばれる可能性があります。呼び出し元でこの制御が行われています。
 func main() {
 	// The count of plugins that could not be verified is returned
 	// to the calling program.
@@ -313,6 +324,7 @@ func main() {
 		log.Debugf("parsing: %s\n", text)
 
 		// skip lines beginning with a comment.
+		// #で始まるコメントはフォーマット検証対象外なので無視する
 		if strings.HasPrefix(text, "#") {
 			continue
 		}
@@ -320,12 +332,14 @@ func main() {
 		textArray = append(textArray, scanner.Text())
 
 		// check for and concatenate lines that have the '\' continuation marker
-		// "\"で終わっているケースについては改行と見なしてcontinueする
+		// "\"で終わっているケースについては改行と見なしてcontinueする。\\となっているのはエスケープシーケンス
 		if strings.HasSuffix(scanner.Text(), "\\") {
 			lineNumber++
 			continue
 		}
 
+		// このロジックは手前の分岐のケースで"\"で終わっているケースだとcontinueしてtextArrayが複数の配列を持っている可能性があるからこのロジックが必要です。
+		// 手前では"\"が入っているかを検証してあればcontinueしているだけなので、"\"が含まれている場合にはスペースへの変換も必要です。
 		line = strings.Join(textArray, " ")
 		line = strings.ReplaceAll(line, "\\", " ")
 

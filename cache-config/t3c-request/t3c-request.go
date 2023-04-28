@@ -65,6 +65,8 @@ func main() {
 	}
 
 	// --get-data=<mode>で指定される。<mode>にはstatuses, chkconfig, update-status, system-info, packagesなどが指定される
+	// update-status: 更新後のステータス想定の取得
+	// status: 設定されている現状のステータスの取得
 	if cfg.GetData != "" {
 		if err := t3cutil.WriteData(cfg.TCCfg); err != nil {
 			log.Errorf("writing data: %s\n", err.Error())

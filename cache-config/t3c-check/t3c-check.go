@@ -91,6 +91,7 @@ func main() {
 
 	env := os.Environ()
 
+	// 引数と環境変数を引き継がせて指定したパスのコマンドを実行します。
 	if err := syscall.Exec(appPath, args, env); err != nil {
 		log.Errorf("error executing sub-command: %s\n", err.Error())
 		os.Exit(ExitCodeCommandErr)

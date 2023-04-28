@@ -67,6 +67,12 @@ func GetStaticAppData(version, gitRevision, buildTimestamp string) (StaticAppDat
 // getHostNameWithoutDomain returns the machine hostname, without domain information.
 // Modified from http://stackoverflow.com/a/34331660/292623
 func getHostNameWithoutDomain() (string, error) {
+
+	// 以下、サンプル。-sを付与するとドメイン情報なしの短いホスト名を取得できる
+	//   [~/trafficcontrol]$ /bin/hostname 
+	//   localhost.local
+	//   [~/trafficcontrol]$ /bin/hostname -s
+	//   localhost
 	cmd := exec.Command("/bin/hostname", "-s")
 	var out bytes.Buffer
 	cmd.Stdout = &out

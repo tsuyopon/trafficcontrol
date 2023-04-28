@@ -294,11 +294,16 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 }
 
 // Load loads the given config file. If an empty string is passed, the default config is returned.
+// 指定されたファイルを読み込む。もし、指定されなければデフォルト設定を応答する
 func Load(fileName string) (Config, error) {
+
+	// --configが指定されていない場合には、デフォルトの設定値が有効になる
 	cfg := DefaultConfig
 	if fileName == "" {
 		return cfg, nil
 	}
+
+	// --configが指定されていない場合には、デフォルト設定が適用される
 	configBytes, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return DefaultConfig, err
@@ -310,6 +315,7 @@ func Load(fileName string) (Config, error) {
 func LoadBytes(bytes []byte) (Config, error) {
 	cfg := DefaultConfig
 	json := jsoniter.ConfigFastest // TODO make configurable?
+	// JSON形式をGoの構造体に変換したい場合にはUnmarshallを利用する。 see: https://zenn.dev/satumahayato010/articles/ae2484d53c6a11
 	err := json.Unmarshal(bytes, &cfg)
 	return cfg, err
 }

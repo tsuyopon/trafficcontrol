@@ -57,7 +57,7 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 	cacheHealthPoller := poller.NewCache(true, cacheHealthHandler, cfg, appData)
 	cacheStatHandler := cache.NewPrecomputeHandler(toData)
 	cacheStatPoller := poller.NewCache(false, cacheStatHandler, cfg, appData)
-	monitorConfigPoller := poller.NewMonitorConfig(cfg.MonitorConfigPollingInterval)
+	monitorConfigPoller := poller.NewMonitorConfig(cfg.MonitorConfigPollingInterval) // monitor_config_polling_interval_msの設定値
 	peerHandler := peer.NewHandler()
 	peerPoller := poller.NewPeer(peerHandler, cfg, appData)
 	distributedPeerHandler := peer.NewHandler()
@@ -188,13 +188,15 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 }
 
 // healthTickListener listens for health ticks, and writes to the health iteration variable. Does not return.
-func healthTickListener(cacheHealthTick <-chan uint64, healthIteration threadsafe.Uint) {
+func healthTickListener(cacheHealthTick <-chan uint64, healthIteration threadsafe.Uint) { // cacheHealthTickは受信専用チャネル
 	for i := range cacheHealthTick {
 		healthIteration.Set(i)
 	}
 }
 
 func startMonitorConfigFilePoller(filename string) error {
+
+	// 無名関数を代入するクロージャー変数
 	onChange := func(bytes []byte, err error) {
 		if err != nil {
 			log.Errorf("monitor config file poll, polling file '%v': %v", filename, err)

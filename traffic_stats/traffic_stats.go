@@ -243,6 +243,7 @@ func main() {
 	var err error
 	var tickers Timers
 
+	// --cfgオプションから設定ファイルを取得してパース処理を行います。
 	configFile := flag.String("cfg", "", "The config file")
 	flag.Parse()
 	if *configFile == "" {
@@ -290,6 +291,7 @@ func main() {
 
 	for {
 		select {
+		// HUPシグナルを受信すると設定の際読み込みを行い、タイマー再セットを行う (トリガーはシグナル受信時)
 		case <-hupChan:
 			info("HUP Received - reloading config")
 			newConfig, err := loadStartupConfig(*configFile, config)
@@ -299,6 +301,7 @@ func main() {
 				config = newConfig
 				tickers = setTimers(config)
 			}
+		// TERMシグナルを受信するとデータを吐き出し、シャットダウンを行う
 		case <-termChan:
 			info("Shutdown Request Received - Sending stored metrics then quitting")
 			for _, val := range Bps {
@@ -308,6 +311,8 @@ func main() {
 			}
 			startShutdown(c)
 			os.Exit(0)
+		// 登録されたデータを外部にExportして、バッチポイントを削除する。これは、10秒毎の定期集計や日時集計で登録されたバッチポイントがある。
+		// デフォルトで30秒毎にタイマー実行される
 		case <-tickers.Publish:
 			for key, val := range Bps {
 				for _, dataExporter := range dataExporters {
@@ -315,9 +320,12 @@ func main() {
 				}
 				delete(Bps, key)
 			}
+		// TrafficMonitorにアクセスしてHealthCheckのURLを変更する。デフォルトで30秒ごとにチェックを行なっている。
+		// 定期的にキャッシュサーバ情報も取得しているためにキャッシュサーバが登録された場合などもちゃんと検知することができる。
 		case runningConfig = <-configChan:
 		case <-tickers.Config:
 			go getToData(config, false, configChan)
+		// 定常的にメトリクスの取得を行う。デフォルト10秒ごと
 		case <-tickers.Poll:
 			for cdnName, urls := range runningConfig.HealthUrls {
 				for _, u := range urls {
@@ -325,8 +333,10 @@ func main() {
 					go calcMetrics(cdnName, u, runningConfig.CacheMap, config)
 				}
 			}
+		// 前回実施から日にちを跨いだ際に実行される。デフォルトで60秒毎に稼働はしているが、日が跨がないと処理が行われない仕組みになっている。
 		case now := <-tickers.DailySummary:
 			go calcDailySummary(now, config, runningConfig)
+		// Bps[key]として登録するだけの
 		case batchPoints := <-config.BpsChan:
 			debug("Received ", len(batchPoints.Points()), " stats")
 			key := fmt.Sprintf("%s%s", batchPoints.Database(), batchPoints.RetentionPolicy())

@@ -160,6 +160,10 @@ func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Heade
 	err := torequtil.GetRetry(cl.NumRetries, "server-name-"+serverHostName, &server, func(obj interface{}) error {
 		params := url.Values{}
 		params.Add("hostName", serverHostName)
+
+		// GET /api/4.0/servers?hostName=<serverHostName>
+		// APIのレスポンス例は下記を参照のこと
+		// See: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/servers.html
 		toServers, toReqInf, err := cl.GetServersCompat(toclient.RequestOptions{
 			QueryParameters: params,
 			Header:          reqHdr,
@@ -167,6 +171,8 @@ func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Heade
 		if err != nil {
 			return errors.New("getting server name '" + serverHostName + "' from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}
+
+		// 
 		if toReqInf.StatusCode != http.StatusNotModified {
 			if len(toServers.Response) < 1 {
 				return errors.New("getting server name '" + serverHostName + "' from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': no servers returned")

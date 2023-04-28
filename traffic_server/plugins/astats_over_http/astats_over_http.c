@@ -523,9 +523,11 @@ static int astats_origin(TSCont cont, TSEvent event, void *edata) {
 
 	TSDebug(PLUGIN_TAG, "in the read stuff");
 
+	// クライアント構造体の取得
 	if (TSHttpTxnClientReqGet(txnp, &reqp, &hdr_loc) != TS_SUCCESS)
 		goto cleanup;
 
+	// クライアントのURL情報を取得
 	if (TSHttpHdrUrlGet(reqp, hdr_loc, &url_loc) != TS_SUCCESS)
 		goto cleanup;
 
@@ -538,6 +540,7 @@ static int astats_origin(TSCont cont, TSEvent event, void *edata) {
 		goto notforme;
 	}
 
+	// アドレス情報を取得して、
 	const struct sockaddr *addr = TSHttpTxnClientAddrGet(txnp);
 	if(!is_ip_allowed(config, addr)) {
 		TSDebug(PLUGIN_TAG, "not right ip");
@@ -627,10 +630,12 @@ void TSPluginInit(int argc, const char *argv[]) {
 
 	config_holder = new_config_holder(argc > 1 ? argv[1] : NULL);
 
+	// 1つめのスレッド: TS_HTTP_READ_REQUEST_HDR_HOOKフック
 	main_cont = TSContCreate(astats_origin, NULL);
 	TSContDataSet(main_cont, (void *) config_holder);
 	TSHttpHookAdd(TS_HTTP_READ_REQUEST_HDR_HOOK, main_cont);
 
+	// 2つめのスレッド: TSMgmtUpdateRegisterに登録されている。スレッド間の共通Mutexを利用している。
 	config_cont = TSContCreate(config_handler, TSMutexCreate());
 	TSContDataSet(config_cont, (void *) config_holder);
 	TSMgmtUpdateRegister(config_cont, PLUGIN_TAG);
@@ -941,6 +946,7 @@ static config_holder_t* new_config_holder(const char* path) {
 	} else {
 		/* Default config file of plugins/cacheurl.config */
 		//		sprintf(default_config_file, "%s/astats.config", TSPluginDirGet());
+		// astats.configがデフォルトの設定ファイルとなる
 		sprintf(default_config_file, "%s/"DEFAULT_CONFIG_NAME, TSConfigDirGet());
 		config_holder->config_path = nstr(default_config_file);
 	}
@@ -957,6 +963,7 @@ static int free_handler(TSCont cont, TSEvent event, void *edata) {
 	TSContDestroy(cont);
 	return 0;
 }
+
 static int config_handler(TSCont cont, TSEvent event, void *edata) {
 	config_holder_t *config_holder;
 

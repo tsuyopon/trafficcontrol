@@ -179,7 +179,10 @@ func main() {
 const ExitCodeErrGeneric = 1
 
 type DataAndFiles struct {
+	// 't3c-request --get-data=config'のoutputが指定される
 	Data  t3cutil.ConfigData      `json:"data"`
+
+	// 't3c-generate'のoutputが指定される
 	Files []t3cutil.ATSConfigFile `json:"files"`
 }
 

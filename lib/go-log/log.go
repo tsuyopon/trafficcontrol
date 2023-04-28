@@ -43,7 +43,10 @@ var (
 	accessCloser io.Closer
 )
 
+// ログオブジェクトの初期化操作を行う
 func initLogger(logger **log.Logger, oldLogCloser *io.Closer, newLogWriter io.WriteCloser, logPrefix string, logFlags int) {
+
+	// newLogWriterにnilが指定されたら、oldLogCloserはクローズして、そのままreturnする
 	if newLogWriter == nil {
 		*logger = nil
 		if *oldLogCloser != nil {
@@ -53,12 +56,14 @@ func initLogger(logger **log.Logger, oldLogCloser *io.Closer, newLogWriter io.Wr
 		return
 	}
 
+	// loggerがnilじゃなかったらすでにログが初期化済みとしてSetOutPutをし、nilの場合には初期化するためにlog.Newを実施する
 	if *logger != nil {
 		(*logger).SetOutput(newLogWriter)
 	} else {
 		*logger = log.New(newLogWriter, logPrefix, logFlags)
 	}
 
+	// oldLogCloserがnilじゃなかったら、oldLogCloserをClose()しておき、oldLogCloserには新しく指定されたnewLogWriterが設定される
 	if *oldLogCloser != nil {
 		(*oldLogCloser).Close()
 	}
@@ -217,6 +222,7 @@ const (
 	StaticFileDir = "/opt/traffic_monitor/static/"
 )
 
+// locationによって標準出力、標準エラー、何も書き出さない、指定されたファイルの出しわけを行う
 func GetLogWriter(location LogLocation) (io.WriteCloser, error) {
 	switch location {
 	case LogLocationStdout:
@@ -271,10 +277,14 @@ func GetLogWriters(cfg Config) (io.WriteCloser, io.WriteCloser, io.WriteCloser, 
 }
 
 func InitCfg(cfg Config) error {
+
+	// ログレベルに応じたオブジェクトを取得する
 	eventW, errW, warnW, infoW, debugW, err := GetLogWriters(cfg)
 	if err != nil {
 		return err
 	}
+
+	// ログオブジェクトの初期化を行う
 	Init(eventW, errW, warnW, infoW, debugW)
 	return nil
 }
