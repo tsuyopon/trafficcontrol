@@ -57,6 +57,7 @@ func getIntervals(monitorConfig tc.TrafficMonitorConfigMap, cfg config.Config, l
 	if !peerPollIntervalExists {
 		return PollIntervals{}, fmt.Errorf("Traffic Ops Monitor config missing 'peers.polling.interval', not setting config changes.\n")
 	}
+
 	peerPollIntervalInt, peerPollIntervalIsInt := peerPollIntervalI.(float64)
 	if !peerPollIntervalIsInt {
 		return PollIntervals{}, fmt.Errorf("Traffic Ops Monitor config 'peers.polling.interval' value '%v' type %T is not an integer, not setting config changes.\n", peerPollIntervalI, peerPollIntervalI)
@@ -67,6 +68,7 @@ func getIntervals(monitorConfig tc.TrafficMonitorConfigMap, cfg config.Config, l
 	if !statPollIntervalExists {
 		return PollIntervals{}, fmt.Errorf("Traffic Ops Monitor config missing 'health.polling.interval', not setting config changes.\n")
 	}
+
 	statPollIntervalInt, statPollIntervalIsInt := statPollIntervalI.(float64)
 	if !statPollIntervalIsInt {
 		return PollIntervals{}, fmt.Errorf("Traffic Ops Monitor config 'health.polling.interval' value '%v' type %T is not an integer, not setting config changes.\n", statPollIntervalI, statPollIntervalI)
@@ -136,7 +138,6 @@ func StartMonitorConfigManager(
 	toSession towrap.TrafficOpsSessionThreadsafe,
 	toData todata.TODataThreadsafe,
 ) threadsafe.TrafficMonitorConfigMap {
-
 
 	monitorConfig := threadsafe.NewTrafficMonitorConfigMap()
 
@@ -229,6 +230,7 @@ func monitorConfigListen(
 		monitorConfig := pollerMonitorCfg.Cfg
 		cdn := pollerMonitorCfg.CDN
 		monitorConfigTS.Set(monitorConfig)
+		// todata/todata.go: Update()から呼ばれる
 		if err := toData.Update(toSession, cdn, monitorConfig); err != nil {
 			log.Errorln("Updating Traffic Ops Data: " + err.Error())
 		}
@@ -377,12 +379,15 @@ func monitorConfigListen(
 				localStates.SetDeliveryService(tc.DeliveryServiceName(ds.XMLID), tc.CRStatesDeliveryService{IsAvailable: false, DisabledLocations: []tc.CacheGroupName{}}) // important to initialize DisabledLocations, so JSON is `[]` not `null`
 			}
 		}
+
 		for ds := range localStates.GetDeliveryServices() {
 			if _, exists := monitorConfig.DeliveryService[string(ds)]; !exists {
 				localStates.DeleteDeliveryService(ds)
 			}
 		}
+
 	}
+
 }
 
 // getCacheGroupsToPoll returns the name of this Traffic Monitor's cache group,
@@ -402,12 +407,15 @@ func getCacheGroupsToPoll(distributedPolling bool, hostname string, monitors map
 			break
 		}
 	}
+
 	if thisTMStatus == "" {
 		return "", "", nil, fmt.Errorf("unable to find status for this Traffic Monitor (%s) in monitoring config snapshot", hostname)
 	}
+
 	if thisTMGroup == "" {
 		return "", "", nil, fmt.Errorf("unable to find cache group for this Traffic Monitor (%s) in monitoring config snapshot", hostname)
 	}
+
 	for _, tm := range monitors {
 		if tm.ServerStatus == thisTMStatus {
 			tmGroupSet[tm.Location] = allCacheGroups[tm.Location]
@@ -432,11 +440,13 @@ func getCacheGroupsToPoll(distributedPolling bool, hostname string, monitors map
 	for tg := range tmGroupSet {
 		tmGroups = append(tmGroups, tg)
 	}
+
 	sort.Strings(tmGroups)
 	cgs := make([]string, 0, len(cacheGroupSet))
 	for cg := range cacheGroupSet {
 		cgs = append(cgs, cg)
 	}
+
 	sort.Strings(cgs)
 	tmGroupCount := len(tmGroups)
 	var closest string
@@ -445,6 +455,7 @@ func getCacheGroupsToPoll(distributedPolling bool, hostname string, monitors map
 		closest, cgs = findAndRemoveClosestCachegroup(cgs, allCacheGroups[tmGroup], allCacheGroups)
 		tmGroupToPolledCacheGroups[tmGroup][closest] = allCacheGroups[closest]
 	}
+
 	return thisTMGroup, thisTMStatus, tmGroupToPolledCacheGroups[thisTMGroup], nil
 }
 

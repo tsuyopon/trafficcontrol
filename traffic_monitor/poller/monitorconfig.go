@@ -71,6 +71,7 @@ func (p MonitorConfigPoller) writeConfig(cfg MonitorCfg) {
 
 func (p MonitorConfigPoller) Poll() {
 
+	// 指定されたタイマーを設定します。ここで指定されたタイマーが経過するとこの関数の下にある for{ select { } }の1つのcaseとして検知されるようになります。
 	tick := time.NewTicker(p.Interval)
 
 	// 終了時にはtimerの停止と、スタックトレースの出力をして終了させる
@@ -115,6 +116,7 @@ func (p MonitorConfigPoller) Poll() {
 			tick.Stop()
 			tick = time.NewTicker(p.Interval)
 
+		// タイマー時間が経過したら呼ばれる
 		case <-tick.C:
 			if !p.Session.Initialized() || p.OpsConfig.CdnName == "" {
 				log.Warnln("MonitorConfigPoller: skipping this iteration, Session is nil")

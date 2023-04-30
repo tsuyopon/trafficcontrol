@@ -146,6 +146,7 @@ type CRConfig struct {
 // この関数の中でTODataオブジェクトが生成され、そのオブジェクトのために必要な情報が取得される
 // この関数は traffic_monitor/manager/monitorconfig.go: monitorConfigListen()から呼ばれます。
 func (d TODataThreadsafe) Update(to towrap.TrafficOpsSessionThreadsafe, cdn string, mc tc.TrafficMonitorConfigMap) error {
+
 	crConfigBytes, _, err := to.LastCRConfig(cdn)
 	if err != nil {
 		return fmt.Errorf("getting last CRConfig: %v", err)
@@ -283,6 +284,7 @@ func getDeliveryServiceRegexes(crc CRConfig, mc tc.TrafficMonitorConfigMap) (Reg
 }
 
 // TODO precompute, move to TOData; call when we get new delivery services, instead of every time we create new stats
+// 新しいDS(Delivery Services)を受信した場合に呼ばれる
 func createRegexes(dsToRegex map[tc.DeliveryServiceName][]string) (Regexes, error) {
 	dsRegexes := Regexes{
 		DirectMatches:                      map[string]tc.DeliveryServiceName{},
@@ -306,6 +308,8 @@ func createRegexes(dsToRegex map[tc.DeliveryServiceName][]string) (Regexes, erro
 				if otherDs, ok := dsRegexes.DirectMatches[regexStr]; ok {
 					return dsRegexes, fmt.Errorf("duplicate Regex %s in %s and %s", regexStr, ds, otherDs)
 				}
+
+				// ここで値を入れている
 				dsRegexes.DirectMatches[regexStr] = ds
 				continue
 			}

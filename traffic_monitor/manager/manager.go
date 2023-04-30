@@ -182,6 +182,7 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 		return fmt.Errorf("starting ops config manager: %v", err)
 	}
 
+	// --configで指定されたファイルを読み込みます。SIGHUPを受信したら再読み込みするように仕掛けます。
 	if err := startMonitorConfigFilePoller(trafficMonitorConfigFileName); err != nil {
 		return fmt.Errorf("starting monitor config file poller: %v", err)
 	}
@@ -192,11 +193,12 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 
 // healthTickListener listens for health ticks, and writes to the health iteration variable. Does not return.
 func healthTickListener(cacheHealthTick <-chan uint64, healthIteration threadsafe.Uint) { // cacheHealthTickは受信専用チャネル
-	for i := range cacheHealthTick {
+	for i := range cacheHealthTick { // cacheHealthTickチャネルから新しい値が受信されるまで待機し、値が受信された場合は、healthIteration 変数にその値を設定します。
 		healthIteration.Set(i)
 	}
 }
 
+// filenameには--configで指定されたファイル名が入ります。
 func startMonitorConfigFilePoller(filename string) error {
 
 	// 無名関数を代入するクロージャー変数
@@ -216,23 +218,30 @@ func startMonitorConfigFilePoller(filename string) error {
 		}
 	}
 
+	// 指定されたファイルの内容をbytesに保存する
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return err
 	}
+
+	// 設定ファイルの読み込みが行われる
 	onChange(bytes, nil)
 
+	// 下記関数ではSIGHUPを受信するとonChangeが実行される仕組みとなっている
 	startSignalFileReloader(filename, unix.SIGHUP, onChange)
+
 	return nil
 }
 
 // signalFileReloader starts a goroutine which, when the given signal is received, attempts to load the given file and calls the given function with its bytes or error. There is no way to stop the goroutine or stop listening for signals, thus this should not be called if it's ever necessary to stop handling or change the listened file. The initialRead parameter determines whether the given handler is called immediately with an attempted file read (without a signal).
 func startSignalFileReloader(filename string, sig os.Signal, f func([]byte, error)) {
+
+	// goroutineで起動する
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, sig)
+		signal.Notify(c, sig)  // 指定されたシグナルを受信したら動き出す
 		for range c {
-			f(ioutil.ReadFile(filename))
+			f(ioutil.ReadFile(filename)) // 指定された無名関数が実行される
 		}
 	}()
 }

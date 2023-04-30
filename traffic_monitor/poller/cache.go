@@ -129,6 +129,8 @@ func (p CachePoller) Poll() {
 }
 
 // TODO iterationCount and/or p.TickChan?
+// この関数は poller/cache.go: Poll()から飲み呼ばれる
+// この関数の中で
 func poller(
 	interval time.Duration,
 	id string,
@@ -154,6 +156,7 @@ func poller(
 	for {
 		select {
 		case <-tick.C:
+
 			// /_atstatエンドポイントへのリクエストが行われる。
 			if (usingIPv4 && url == "") || (!usingIPv4 && url6 == "") {
 				usingIPv4 = !usingIPv4
@@ -187,7 +190,7 @@ func poller(
 				usingIPv4 = !usingIPv4
 			}
 
-			<-pollFinishedChan  // L184のgo handler.Handleの最後の引数に指定したchannelで処理が終わると、送信されるので、ここの受信のwaitが解除される。
+			<-pollFinishedChan  // 有効コードで4行上にあるgo handler.Handleの最後の引数に指定したchannelで処理が終わると、チャネルが送信されるので、ここの受信のwaitが解除される。
 		case <-die:
 			tick.Stop()  // Poll()の「go func() { killChan <- struct{}{} }()」はここを実行させるためのもの
 			return

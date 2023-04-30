@@ -79,6 +79,7 @@ func MakeDispatchMap(
 		}
 	}
 
+	// TrafficOps WebAPIのエンドポイントとディスパッチされる関数ハンドラについて定義しています。
 	dispatchMap := map[string]http.HandlerFunc{
 		"/publish/CrConfig": wrap(WrapAgeErr(errorCount, func() ([]byte, time.Time, error) {
 			return srvTRConfig(opsConfig, toSession)
@@ -145,6 +146,7 @@ func MakeDispatchMap(
 			return srvAPICRConfigHist(toSession)
 		}, rfc.ApplicationJSON)),
 	}
+
 	return addTrailingSlashEndpoints(dispatchMap)
 }
 
@@ -350,6 +352,7 @@ func stripAllWhitespace(s string) string {
 }
 
 // addTrailingEndpoints adds endpoints with trailing slashes to the given dispatch map. Without this, Go will match `route` and `route/` differently.
+// 末尾に「/」がなければ、「/」を付与する
 func addTrailingSlashEndpoints(dispatchMap map[string]http.HandlerFunc) map[string]http.HandlerFunc {
 	for route, handler := range dispatchMap {
 		if strings.HasSuffix(route, "/") {

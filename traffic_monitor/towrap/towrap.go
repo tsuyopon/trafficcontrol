@@ -90,7 +90,10 @@ func (c ByteMapCache) Get(key string) ([]byte, time.Time, *tc.CRConfigStats) {
 }
 
 func (s TrafficOpsSessionThreadsafe) BackupFileExists() bool {
+
+	// デフォルト: /opt/traffic_monitor/crconfig.backup。設定ファイル中にcrconfig_backup_fileとしても指定可能
 	if _, err := os.Stat(s.CRConfigBackupFile); !os.IsNotExist(err) {
+		// デフォルト: /opt/traffic_monitor/tmconfig.backup。設定ファイル中にtmconfig_backup_fileとしても指定可能
 		if _, err = os.Stat(s.TMConfigBackupFile); !os.IsNotExist(err) {
 			return true
 		}
@@ -515,6 +518,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 		}
 	}
 
+	// TrafficOps APIからの取得がエラーではない場合
 	if err == nil {
 		// 「/cdns/<cdn>/configs/monitoring」(GET)から正常に値を取得することができた場合
 		log.Infoln("successfully got Traffic Monitor config from Traffic Ops")
@@ -526,11 +530,14 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 		configMap, err = tc.TrafficMonitorTransformToMap(config)
 	}
 
+	// TrafficOps APIからの取得がエラーの場合
 	if err != nil {
+
 		// Default error case, no backup file exists
 		if !s.BackupFileExists() {
 			return nil, err
 		}
+
 		log.Errorln("using backup file for monitoring config snapshot due to invalid monitoring config snapshot from Traffic Ops: " + err.Error())
 
 		b, err := ioutil.ReadFile(s.TMConfigBackupFile) // 設定ファイル中の`tmconfig_backup_file`に指定されている値
@@ -543,13 +550,17 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 		if err := json.Unmarshal(b, &tmConfig); err != nil {
 			return nil, errors.New("unmarshalling backup file monitoring.json: " + err.Error())
 		}
+
+		// TrafficOpsAPIからではなく、バックアップで保存しておいたファイルからオブジェクトにマッピングさせる
 		return tc.TrafficMonitorTransformToMap(&tmConfig)
 	}
 
 	json := jsoniter.ConfigFastest
 	data, err := json.Marshal(*config)  // jsonに変換する
+
+	// 正常にJSONへと変換することができたら、ファイルへの書き込みを行う
 	if err == nil {
-		if wErr := ioutil.WriteFile(s.TMConfigBackupFile, data, 0644); wErr != nil {
+		if wErr := ioutil.WriteFile(s.TMConfigBackupFile, data, 0644); wErr != nil { // デフォルト: /opt/traffic_monitor/tmconfig.backup, json設定: tmconfig_backup_file
 			log.Errorf("failed to write TM config backup file: %v", wErr)
 		}
 	}
