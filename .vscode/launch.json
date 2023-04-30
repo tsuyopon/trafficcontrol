@@ -1,0 +1,71 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "enroller-debug",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "port": 2343,
+            "host": "localhost",
+            "cwd": "${workspaceRoot}",
+            "showLog": true,
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "trafficmonitor-debug",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "port": 2344,
+            "host": "localhost",
+            "cwd": "${workspaceRoot}",
+            "showLog": true,
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "trafficops-debug",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "port": 2345,
+            "host": "localhost",
+            "cwd": "${workspaceRoot}",
+            "showLog": true,
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "trafficstat-debug",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "port": 2346,
+            "host": "localhost",
+            "cwd": "${workspaceRoot}",
+            "showLog": true,
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "edge-debug",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "port": 2347,
+            "host": "localhost",
+            "cwd": "${workspaceRoot}",
+            "showLog": true,
+            "env": {},
+            "args": []
+        }
+    ]
+}
