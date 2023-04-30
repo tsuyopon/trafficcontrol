@@ -49,9 +49,13 @@ func StartHealthResultManager(
 	cachesChanged <-chan struct{},
 	combineStates func(),
 ) (threadsafe.DurationMap, threadsafe.ResultHistory, threadsafe.UnpolledCaches) {
+
+
 	lastHealthDurations := threadsafe.NewDurationMap()
 	healthHistory := threadsafe.NewResultHistory()
 	healthUnpolledCaches := threadsafe.NewUnpolledCaches()
+
+	// ゴルーチンを呼び出す
 	go healthResultManagerListen(
 		cacheHealthChan,
 		toData,
@@ -67,6 +71,7 @@ func StartHealthResultManager(
 		cachesChanged,
 		combineStates,
 	)
+
 	return lastHealthDurations, healthHistory, healthUnpolledCaches
 }
 
@@ -85,6 +90,7 @@ func healthResultManagerListen(
 	cachesChanged <-chan struct{},
 	combineStates func(),
 ) {
+
 	haveCachesChanged := func() bool {
 		select {
 		case <-cachesChanged:
@@ -98,10 +104,13 @@ func healthResultManagerListen(
 	// This reads at least 1 value from the cacheHealthChan. Then, we loop, and try to read from the channel some more. If there's nothing to read, we hit `default` and process. If there is stuff to read, we read it, then inner-loop trying to read more. If we're continuously reading and the channel is never empty, and we hit the tick time, process anyway even though the channel isn't empty, to prevent never processing (starvation).
 	var ticker *time.Ticker
 
+	// 後のコードパスにて、ticker.Cチャネル受信やdefaultで呼ばれる
 	process := func(results []cache.Result) {
+
 		if haveCachesChanged() {
 			healthUnpolledCaches.SetNewCaches(getNewCaches(localStates, monitorConfig))
 		}
+
 		processHealthResult(
 			toData,
 			localStates,
@@ -144,6 +153,7 @@ func healthResultManagerListen(
 			}
 		}
 	}
+
 }
 
 // processHealthResult processes the given health results, adding their stats to the CacheAvailableStatus. Note this is NOT threadsafe, because it non-atomically gets CacheAvailableStatuses, Events, LastHealthDurations and later updates them. This MUST NOT be called from multiple threads.
@@ -173,6 +183,16 @@ func processHealthResult(
 	}()
 
 	toDataCopy := toData.Get() // create a copy, so the same data used for all processing of this cache health result
+	//type TOData struct {
+	//    DeliveryServiceRegexes Regexes
+	//    DeliveryServiceServers map[tc.DeliveryServiceName][]tc.CacheName
+	//    DeliveryServiceTypes   map[tc.DeliveryServiceName]tc.DSTypeCategory
+	//    ServerCachegroups      map[tc.CacheName]tc.CacheGroupName
+	//    ServerDeliveryServices map[tc.CacheName][]tc.DeliveryServiceName
+	//    ServerTypes            map[tc.CacheName]tc.CacheType
+	//}
+
+
 	monitorConfigCopy := monitorConfig.Get()
 	healthHistoryCopy := healthHistory.Get().Copy()
 	for i, healthResult := range results {

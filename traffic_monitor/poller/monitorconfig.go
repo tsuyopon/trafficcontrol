@@ -63,14 +63,17 @@ func (p MonitorConfigPoller) writeConfig(cfg MonitorCfg) {
 		select {
 		case p.ConfigChannel <- cfg:
 			return // return after successfully writing.
-		case <-p.ConfigChannel:
+		case <-p.ConfigChannel: // 手前のcaseの「p.ConfigChannel」チャネルに登録される値が満杯となった場合に、このcaseが実行されることになります。
 			// if the channel buffer was full, read, then loop and try to write again
 		}
 	}
 }
 
 func (p MonitorConfigPoller) Poll() {
+
 	tick := time.NewTicker(p.Interval)
+
+	// 終了時にはtimerの停止と、スタックトレースの出力をして終了させる
 	defer tick.Stop()
 	defer func() {
 		if err := recover(); err != nil {
@@ -81,16 +84,22 @@ func (p MonitorConfigPoller) Poll() {
 		log.Errorf("%s\n", stacktrace())
 		os.Exit(1) // The Monitor can't run without a MonitorConfigPoller
 	}()
+
+	// 無限ループ
 	for {
 		// Every case MUST be asynchronous and non-blocking, to prevent livelocks. If a chan must be written to, it must either be buffered AND remove existing values, or be written to in a goroutine.
 		select {
+
 		case opsConfig := <-p.OpsConfigChannel:
 			log.Infof("MonitorConfigPoller: received new opsConfig: %v\n", opsConfig)
-			p.OpsConfig = opsConfig
+			p.OpsConfig = opsConfig   // 受け取った設定値をp.OpsConfigに書き込んでおき、終了する。(おそらく、タイマー起因でこの値がその後使われる)
+
 		case session := <-p.SessionChannel:
 			log.Infof("MonitorConfigPoller: received new session: %v\n", session)
 			p.Session = session
-		case i := <-p.IntervalChan:
+
+		// manager/monitorconfig.go: monitorConfigListen()内のtoIntervalSubscriberへのチャネル送信により、このチャネルで受信が行われる。
+		case i := <-p.IntervalChan:   
 			if i == p.Interval {
 				continue
 			}
@@ -99,9 +108,13 @@ func (p MonitorConfigPoller) Poll() {
 				log.Errorf("MonitorConfigPoller: received negative interval: %v; ignoring\n", i)
 				continue
 			}
+			// IntervalChanによる受信した値にタイマーの間隔を変更する
 			p.Interval = i
+
+			// 古いタイマーを停止して、設定したタイマーの再実行を行う
 			tick.Stop()
 			tick = time.NewTicker(p.Interval)
+
 		case <-tick.C:
 			if !p.Session.Initialized() || p.OpsConfig.CdnName == "" {
 				log.Warnln("MonitorConfigPoller: skipping this iteration, Session is nil")

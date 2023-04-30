@@ -60,6 +60,8 @@ func init() {
 }
 
 func main() {
+
+	// 指定されたオプションの取得処理
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	showPlugins := flag.Bool("plugins", false, "Show the list of plugins and exit")
 	showRoutes := flag.Bool("api-routes", false, "Show the list of API routes and exit")
@@ -69,10 +71,13 @@ func main() {
 	backendConfigFileName := flag.String("backendcfg", "", "The backend config file path")
 	flag.Parse()
 
+	// --versionが指定されていた場合
 	if *showVersion {
 		fmt.Println(about.About.RPMVersion)
 		os.Exit(0)
 	}
+
+	// --pluginsが指定されていた場合、プラグインリストを表示して終了
 	if *showPlugins {
 		fmt.Println(strings.Join(plugin.List(), "\n"))
 		os.Exit(0)
@@ -135,6 +140,7 @@ func main() {
 		sslStr = "disable"
 	}
 
+	// PostgreSQLへの接続を行う
 	db, err := sqlx.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&fallback_application_name=trafficops", cfg.DB.User, cfg.DB.Password, cfg.DB.Hostname, cfg.DB.Port, cfg.DB.DBName, sslStr))
 	if err != nil {
 		log.Errorf("opening database: %v\n", err)

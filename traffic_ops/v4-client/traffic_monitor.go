@@ -35,6 +35,8 @@ const apiCDNMonitoringConfig = "/cdns/%s/configs/monitoring"
 
 // GetTrafficMonitorConfig returns the monitoring configuration for the CDN named by 'cdn'.
 func (to *Session) GetTrafficMonitorConfig(cdn string, opts RequestOptions) (tc.TMConfigResponse, toclientlib.ReqInf, error) {
+	// 「/cdns/<cdn>/configs/monitoring」(GET)から取得する
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/cdns_name_configs_monitoring.html
 	route := fmt.Sprintf(apiCDNMonitoringConfig, url.PathEscape(cdn))
 	var data tc.TMConfigResponse
 	reqInf, err := to.get(route, opts, &data)

@@ -64,10 +64,13 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 	distributedPeerPoller := poller.NewPeer(distributedPeerHandler, cfg, appData)
 
 	go monitorConfigPoller.Poll()
+
 	go cacheHealthPoller.Poll()
+
 	if cfg.StatPolling {
 		go cacheStatPoller.Poll()
 	}
+
 	go peerPoller.Poll()
 	if cfg.DistributedPolling {
 		go distributedPeerPoller.Poll()

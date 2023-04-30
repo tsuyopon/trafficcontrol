@@ -636,7 +636,10 @@ func (params *TMParameters) UnmarshalJSON(bytes []byte) (err error) {
 // This also implicitly calls Valid on the TrafficMonitorConfigMap before
 // returning it, and gives back whatever value that returns as the error return
 // value.
+
+// TrafficOpsAPIの「/cdns/<cdn>/configs/monitoring」(GET)から取得した値を引数tmConfigに指定して、tmオブジェクトのマッピングを生成する
 func TrafficMonitorTransformToMap(tmConfig *TrafficMonitorConfig) (*TrafficMonitorConfigMap, error) {
+
 	var tm TrafficMonitorConfigMap
 
 	tm.TrafficServer = make(map[string]TrafficServer, len(tmConfig.TrafficServers))
@@ -647,26 +650,36 @@ func TrafficMonitorTransformToMap(tmConfig *TrafficMonitorConfig) (*TrafficMonit
 	tm.Profile = make(map[string]TMProfile, len(tmConfig.Profiles))
 	tm.Topology = tmConfig.Topologies
 
+	// TrafficOpsAPIの「/cdns/<cdn>/configs/monitoring」(GET)から取得した値をマッピングする。
+	// tmConfig.xxxxxのデータ構造は下記のレスポンスサンプルを参照のこと($.trafficServers, $.cacheGroups, $.config, $.trafficMonitorsなどの記載があります)
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/cdns_name_configs_monitoring.html
+
+	// TrafficOps APIレスポンスの$.trafficServersの処理
 	for _, trafficServer := range tmConfig.TrafficServers {
 		tm.TrafficServer[trafficServer.HostName] = trafficServer
 	}
 
+	// TrafficOps APIレスポンスの$.cacheGroupsの処理
 	for _, cacheGroup := range tmConfig.CacheGroups {
 		tm.CacheGroup[cacheGroup.Name] = cacheGroup
 	}
 
+	// TrafficOps APIレスポンスの$.configの処理
 	for parameterKey, parameterVal := range tmConfig.Config {
 		tm.Config[parameterKey] = parameterVal
 	}
 
+	// TrafficOps APIレスポンスの$.trafficMonitorsの処理
 	for _, trafficMonitor := range tmConfig.TrafficMonitors {
 		tm.TrafficMonitor[trafficMonitor.HostName] = trafficMonitor
 	}
 
+	// TrafficOps APIレスポンスの$.deliveryServicesの処理
 	for _, deliveryService := range tmConfig.DeliveryServices {
 		tm.DeliveryService[deliveryService.XMLID] = deliveryService
 	}
 
+	// TrafficOps APIレスポンスの$.profilesの処理
 	for _, profile := range tmConfig.Profiles {
 		bwThreshold := profile.Parameters.Thresholds["availableBandwidthInKbps"]
 		profile.Parameters.MinFreeKbps = int64(bwThreshold.Val)

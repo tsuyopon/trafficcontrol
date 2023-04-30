@@ -193,11 +193,17 @@ func StartOpsConfigManager(
 		opsConfig.Set(newOpsConfig)
 
 		if cdn, err := toSession.MonitorCDN(staticAppData.Hostname); err != nil {
+			// エラーがある場合
 			handleErr(fmt.Errorf("getting CDN name from Traffic Ops, using config CDN '%s': %s\n", newOpsConfig.CdnName, err))
 		} else {
+			// エラーない場合
+
+			// 「設定されたCdnNameの値が空ではない」かつ「設定されたCdnNameの値とTrafficOpsから取得したcdnの値が一致しない」場合には警告を取得する。
 			if newOpsConfig.CdnName != "" && newOpsConfig.CdnName != cdn {
 				log.Warnf("%s Traffic Ops CDN '%s' doesn't match config CDN '%s' - using Traffic Ops CDN\n", staticAppData.Hostname, cdn, newOpsConfig.CdnName)
 			}
+
+			// TrafficOpsから取得できた場合には、その値をnewOpsConfig.CdnNameに書き出しておく
 			newOpsConfig.CdnName = cdn
 		}
 
@@ -215,6 +221,8 @@ func StartOpsConfigManager(
 	if err != nil {
 		return opsConfig, err
 	}
+
+	// 同一関数内で定義した無名関数の定義がonChangeに設定されているのでそれを呼び出す。
 	onChange(bytes, err)
 
 	startSignalFileReloader(opsConfigFile, unix.SIGHUP, onChange)

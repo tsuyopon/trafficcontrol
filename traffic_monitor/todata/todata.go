@@ -112,6 +112,7 @@ func (d TODataThreadsafe) Get() TOData {
 	return *d.toData
 }
 
+// 同一ファイルupdata.goのUpdate()関数からこのsetが呼ばれる
 func (d TODataThreadsafe) set(newTOData TOData) {
 	d.m.Lock()
 	*d.toData = newTOData
@@ -142,6 +143,8 @@ type CRConfig struct {
 }
 
 // Update updates the TOData data with the last fetched CDN
+// この関数の中でTODataオブジェクトが生成され、そのオブジェクトのために必要な情報が取得される
+// この関数は traffic_monitor/manager/monitorconfig.go: monitorConfigListen()から呼ばれます。
 func (d TODataThreadsafe) Update(to towrap.TrafficOpsSessionThreadsafe, cdn string, mc tc.TrafficMonitorConfigMap) error {
 	crConfigBytes, _, err := to.LastCRConfig(cdn)
 	if err != nil {

@@ -112,7 +112,9 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 // UpdateServer replaces the Server identified by ID with the provided one.
 func (to *Session) UpdateServer(id int, server tc.ServerV4, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
 	var alerts tc.Alerts
-	route := fmt.Sprintf("%s/%d", apiServers, id)
+
+	// 「/servers/<id> (PUT)」
+	route := fmt.Sprintf("%s/%d", apiServers, id) 
 	reqInf, err := to.put(route, opts, server, &alerts)
 	return alerts, reqInf, err
 }
@@ -120,12 +122,16 @@ func (to *Session) UpdateServer(id int, server tc.ServerV4, opts RequestOptions)
 // GetServers retrieves Servers from Traffic Ops.
 func (to *Session) GetServers(opts RequestOptions) (tc.ServersV4Response, toclientlib.ReqInf, error) {
 	var data tc.ServersV4Response
+
+	// 「/servers (GET)」
 	reqInf, err := to.get(apiServers, opts, &data)
 	return data, reqInf, err
 }
 
 // DeleteServer deletes the Server with the given ID.
 func (to *Session) DeleteServer(id int, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
+
+	// 「/servers/<id> (DELETE)」
 	route := fmt.Sprintf("%s/%d", apiServers, id)
 	var alerts tc.Alerts
 	reqInf, err := to.del(route, opts, &alerts)

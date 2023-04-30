@@ -136,7 +136,11 @@ func StartMonitorConfigManager(
 	toSession towrap.TrafficOpsSessionThreadsafe,
 	toData todata.TODataThreadsafe,
 ) threadsafe.TrafficMonitorConfigMap {
+
+
 	monitorConfig := threadsafe.NewTrafficMonitorConfigMap()
+
+	// goroutineを実行して即座に終了する
 	go monitorConfigListen(monitorConfig,
 		monitorConfigPollChan,
 		localStates,
@@ -347,6 +351,8 @@ func monitorConfigListen(
 		if cfg.DistributedPolling {
 			distributedPeerURLSubscriber <- poller.PeerPollerConfig{Urls: distributedPeerURLs, Interval: intervals.Peer, NoKeepAlive: intervals.PeerNoKeepAlive}
 		}
+
+		// MonitorConfigPoller.Pollの「<-p.IntervalChan」で受信される
 		toIntervalSubscriber <- intervals.TO
 		peerStates.SetTimeout((intervals.Peer + cfg.HTTPTimeout) * 2)
 		peerStates.SetPeers(peerSet)

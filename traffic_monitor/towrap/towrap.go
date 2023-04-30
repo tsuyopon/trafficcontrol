@@ -472,6 +472,7 @@ func (s TrafficOpsSessionThreadsafe) LastCRConfig(cdn string) ([]byte, time.Time
 	return crConfig, crConfigTime, nil
 }
 
+// 「/cdns/<cdn>/configs/monitoring」(GET)から取得する
 func (s TrafficOpsSessionThreadsafe) fetchTMConfig(cdn string) (*tc.TrafficMonitorConfig, error) {
 	ss := s.get()
 	if ss == nil {
@@ -505,7 +506,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 	var configMap *tc.TrafficMonitorConfigMap
 	var err error
 
-	config, err = s.fetchTMConfig(cdn)
+	config, err = s.fetchTMConfig(cdn) // 「/cdns/<cdn>/configs/monitoring」(GET)から取得する
 	if err != nil {
 		log.Warnln("getting Traffic Monitor config from Traffic Ops using up-to-date client: " + err.Error() + ". Retrying with legacy client")
 		config, err = s.fetchLegacyTMConfig(cdn)
@@ -515,10 +516,13 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 	}
 
 	if err == nil {
+		// 「/cdns/<cdn>/configs/monitoring」(GET)から正常に値を取得することができた場合
 		log.Infoln("successfully got Traffic Monitor config from Traffic Ops")
 		if config == nil {
 			return nil, fmt.Errorf("nil Traffic Monitor config after successful fetch")
 		}
+
+		// TrafficOpsAPIの「/cdns/<cdn>/configs/monitoring」(GET)から取得した値をオブジェクトにマッピングする
 		configMap, err = tc.TrafficMonitorTransformToMap(config)
 	}
 
@@ -529,7 +533,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 		}
 		log.Errorln("using backup file for monitoring config snapshot due to invalid monitoring config snapshot from Traffic Ops: " + err.Error())
 
-		b, err := ioutil.ReadFile(s.TMConfigBackupFile)
+		b, err := ioutil.ReadFile(s.TMConfigBackupFile) // 設定ファイル中の`tmconfig_backup_file`に指定されている値
 		if err != nil {
 			return nil, errors.New("reading TMConfigBackupFile: " + err.Error())
 		}
@@ -543,7 +547,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 	}
 
 	json := jsoniter.ConfigFastest
-	data, err := json.Marshal(*config)
+	data, err := json.Marshal(*config)  // jsonに変換する
 	if err == nil {
 		if wErr := ioutil.WriteFile(s.TMConfigBackupFile, data, 0644); wErr != nil {
 			log.Errorf("failed to write TM config backup file: %v", wErr)
@@ -563,20 +567,24 @@ func (s TrafficOpsSessionThreadsafe) TrafficMonitorConfigMap(cdn string) (*tc.Tr
 	return mc, nil
 }
 
+// 指定されたhostNameを元に「/servers?hostName=<hostname> (GET)」にアクセスして、
+// CDNNameに1つ以上のhostNameが紐づいていることを確認する
 func (s TrafficOpsSessionThreadsafe) fetchServerByHostname(hostName string) (tc.ServerV40, error) {
 	ss := s.get()
 	if ss == nil {
 		return tc.ServerV40{}, ErrNilSession
 	}
 
+	// 「/servers?hostName=<hostname> (GET)」が呼ばれる
 	params := url.Values{}
 	params.Set("hostName", hostName)
-	resp, _, err := ss.GetServers(client.RequestOptions{QueryParameters: params})
+	resp, _, err := ss.GetServers(client.RequestOptions{QueryParameters: params})  // traffic_ops/v4-client/server.goが呼ばれる
 	if err != nil {
 		return tc.ServerV40{}, fmt.Errorf("fetching server by hostname '%s': %v", hostName, err)
 	}
 
 	respLen := len(resp.Response)
+	// 1件も該当のサーバが見当たらなければエラー
 	if respLen < 1 {
 		return tc.ServerV40{}, fmt.Errorf("no server '%s' found in Traffic Ops", hostName)
 	}
@@ -586,16 +594,20 @@ func (s TrafficOpsSessionThreadsafe) fetchServerByHostname(hostName string) (tc.
 	found := false
 	for i, srv := range resp.Response {
 		num = i
+		// CDNNameが設定されている かつ 指定されたHostNameが設定されている
 		if srv.CDNName != nil && srv.HostName != nil && *srv.HostName == hostName {
 			server = srv
 			found = true
 			break
 		}
 	}
+
+	// 対象のCDNでhostNameが見つからなかった場合にはログを出力しておく
 	if !found {
 		return tc.ServerV40{}, fmt.Errorf("either no server '%s' found in Traffic Ops, or none by that hostName had non-nil CDN", hostName)
 	}
 
+	// 対象のCDNに属するhostNameが見つかった場合にはその情報をWarnfで出力しておく
 	if respLen > 1 {
 		log.Warnf("Getting monitor server by hostname '%s' returned %d servers - selecting #%d", hostName, respLen, num)
 	}

@@ -36,6 +36,8 @@ func StartDistributedPeerManager(
 	events health.ThreadsafeEvents,
 	unpolledCaches threadsafe.UnpolledCaches,
 ) {
+
+	// 無名関数のゴルーチンを呼び出す
 	go func() {
 		for distributedPeerResult := range distributedPeerChan {
 			compareDistributedPeerState(events, distributedPeerResult, distributedPeerStates)

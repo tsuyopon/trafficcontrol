@@ -32,6 +32,8 @@ func StartPeerManager(
 	events health.ThreadsafeEvents,
 	combineState func(),
 ) {
+
+	// 無名関数のgoroutineを起動する
 	go func() {
 		for peerResult := range peerChan {
 			comparePeerState(events, peerResult, peerStates)
