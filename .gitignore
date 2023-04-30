@@ -60,7 +60,6 @@ local.tar.gz
 # Editor/IDE configuration files
 *.sublime-project
 *.sublime-workspace
-.vscode/
 __debug_bin
 *.code-workspace
 *.pydevproject
