@@ -106,6 +106,7 @@ var once = sync.Once{}
 
 // InitUsersCache attempts to initialize the in-memory users data (if enabled) then
 // starts a goroutine to periodically refresh the in-memory data from the database.
+// 定期的にユーザー+権限情報をキャッシュするためにgoroutineを起動します
 func InitUsersCache(interval time.Duration, db *sql.DB, timeout time.Duration) {
 	once.Do(func() {
 		if interval <= 0 {
@@ -118,20 +119,27 @@ func InitUsersCache(interval time.Duration, db *sql.DB, timeout time.Duration) {
 }
 
 func startUsersCacheRefresher(interval time.Duration, db *sql.DB, timeout time.Duration) {
+
 	go func() {
 		for {
+			// 一定時間waitする
 			time.Sleep(interval)
+
+			// PostgreSQLにアクセスして権限情報とユーザー情報を取得してメモリ上に保存しておきます
 			refreshUsersCache(db, timeout)
 		}
 	}()
 }
 
 func refreshUsersCache(db *sql.DB, timeout time.Duration) {
+
+	// PostgreSQLにアクセスして権限情報とユーザー情報を取得する
 	newUsers, err := getUsers(db, timeout)
 	if err != nil {
 		log.Errorf("refreshing users cache: %s", err.Error())
 		return
 	}
+
 	usersCache.Lock()
 	defer usersCache.Unlock()
 	usersCache.userMap = newUsers
@@ -151,12 +159,14 @@ func createTokenToUsernameMap(users map[string]user) map[string]string {
 	return tokenToUserName
 }
 
+// PostgreSQLからロール情報やユーザ情報を取得して、配列に保存しておく
 func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 	dbCtx, dbClose := context.WithTimeout(context.Background(), timeout)
 	defer dbClose()
 	roles := make(map[int]role)
 	newUsers := make(map[string]user)
 
+	// DBトランザクションの開始
 	tx, err := db.BeginTx(dbCtx, nil)
 	if err != nil {
 		return nil, errors.New("beginning users transaction: " + err.Error())
@@ -166,11 +176,15 @@ func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 			log.Errorln("committing users transaction: " + err.Error())
 		}
 	}()
+
+	// ロール情報一覧をDBから取得する
 	rolesRows, err := tx.QueryContext(dbCtx, getRolesQuery)
 	if err != nil {
 		return nil, errors.New("querying roles: " + err.Error())
 	}
 	defer log.Close(rolesRows, "closing role rows")
+
+	// レコード毎に処理して権限情報を保持しておく
 	for rolesRows.Next() {
 		r := role{}
 		if err := rolesRows.Scan(&r.Capabilities, &r.ID, &r.Name, &r.PrivLevel); err != nil {
@@ -182,11 +196,14 @@ func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 		return nil, errors.New("iterating over role rows: " + err.Error())
 	}
 
+	// ユーザ情報一覧をDBから取得する
 	rows, err := tx.QueryContext(dbCtx, getUsersQuery)
 	if err != nil {
 		return nil, errors.New("querying users: " + err.Error())
 	}
 	defer log.Close(rows, "closing users rows")
+
+	// レコード毎に処理してユーザー情報を配列に保存しておく
 	for rows.Next() {
 		u := user{}
 		if err := rows.Scan(&u.ID, &u.LocalPasswd, &u.Role, &u.TenantID, &u.Token, &u.UCDN, &u.UserName); err != nil {
@@ -205,5 +222,6 @@ func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 	if err = rows.Err(); err != nil {
 		return nil, errors.New("iterating over user rows: " + err.Error())
 	}
+
 	return newUsers, nil
 }

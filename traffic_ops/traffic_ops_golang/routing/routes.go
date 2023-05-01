@@ -915,6 +915,7 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 	}
 
 	// sanity check to make sure all Route IDs are unique
+	// 重複したroute設定が行われていないかどうかをチェックする
 	knownRouteIDs := make(map[int]struct{}, len(routes))
 	for _, r := range routes {
 		if _, found := knownRouteIDs[r.ID]; !found {
@@ -925,17 +926,22 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 	}
 
 	// check for unknown route IDs in cdn.conf
-	disabledRoutes := GetRouteIDMap(d.DisabledRoutes)
+	disabledRoutes := GetRouteIDMap(d.DisabledRoutes)  // disabled_routes設定が格納される。
 	unknownRouteIDs := []string{}
 	for _, routeMap := range []map[int]struct{}{disabledRoutes} {
 		for routeID := range routeMap {
+			// 存在しないIDがdisabled_routesに含まれている場合にはunknownRouteIDsにappendする
 			if _, known := knownRouteIDs[routeID]; !known {
 				unknownRouteIDs = append(unknownRouteIDs, fmt.Sprintf("%d", routeID))
 			}
 		}
 	}
+
+	// disabled_routesに存在する場合にはメッセージを表示しておく
 	if len(unknownRouteIDs) > 0 {
 		msg := "unknown route IDs in routing_blacklist: " + strings.Join(unknownRouteIDs, ", ")
+
+		// ignore_unknown_routes設定がtrueの場合には警告だけ表示しておく
 		if d.IgnoreUnknownRoutes {
 			log.Warnln(msg)
 		} else {

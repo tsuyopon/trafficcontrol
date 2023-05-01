@@ -118,20 +118,26 @@ func (p MonitorConfigPoller) Poll() {
 
 		// タイマー時間が経過したら呼ばれる
 		case <-tick.C:
+			// セッションが未初期化 または opsConfでCdnNameが空の設定の場合には、処理をスキップする
 			if !p.Session.Initialized() || p.OpsConfig.CdnName == "" {
 				log.Warnln("MonitorConfigPoller: skipping this iteration, Session is nil")
 				continue
 			}
+
+			// 「/cdns/<cdn>/configs/monitoring」(GET)から取得してオブジェクトにマッピングする
 			monitorConfig, err := p.Session.TrafficMonitorConfigMap(p.OpsConfig.CdnName)
 			if err != nil {
 				log.Errorf("MonitorConfigPoller: %s\n %v\n", err, monitorConfig)
 				continue
 			}
+
 			// poll the CRConfig so that it is synchronized with the TMConfig
 			if _, err := p.Session.CRConfigRaw(p.OpsConfig.CdnName); err != nil {
 				log.Errorf("MonitorConfigPoller: error getting CRConfig: %v", err)
 				continue
 			}
+
+			// 書き込みチャネルにこの引数の情報(MonitorCfg)を引き渡す
 			p.writeConfig(MonitorCfg{CDN: p.OpsConfig.CdnName, Cfg: *monitorConfig})
 		}
 	}

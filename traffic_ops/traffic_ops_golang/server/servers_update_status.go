@@ -208,7 +208,8 @@ func getServerUpdateStatusFromCache(hostname string) []tc.ServerUpdateStatusV40 
 var once = sync.Once{}
 
 func InitServerUpdateStatusCache(interval time.Duration, db *sql.DB, timeout time.Duration) {
-	once.Do(func() {
+
+	once.Do(func() {  // 「var once = sync.Once{}」としてその手前で定義されている
 		if interval <= 0 {
 			return
 		}
@@ -216,17 +217,24 @@ func InitServerUpdateStatusCache(interval time.Duration, db *sql.DB, timeout tim
 		refreshServerUpdateStatusCache(db, timeout)
 		startServerUpdateStatusCacheRefresher(interval, db, timeout)
 	})
+
 }
 
 func startServerUpdateStatusCacheRefresher(interval time.Duration, db *sql.DB, timeout time.Duration) {
+
+	// サーバの更新ステータス(Update Status)を定期的に更新する
 	go func() {
 		for {
+			// intervalで指定された秒数だけ待つ
 			time.Sleep(interval)
+
+			// サーバの更新ステータス(Update Status)更新する
 			refreshServerUpdateStatusCache(db, timeout)
 		}
 	}()
 }
 
+// サーバの更新ステータスを取得して、変更する
 func refreshServerUpdateStatusCache(db *sql.DB, timeout time.Duration) {
 	newServerUpdateStatuses, err := getServerUpdateStatuses(db, timeout)
 	if err != nil {
@@ -297,6 +305,8 @@ const getTopologyCacheGroupParentsQuery = `
 	GROUP BY cg_child.id
 `
 
+// PostgreSQLからの取得を行う
+// サーバが更新が必要かどうかのステータス情報を応答する
 func getServerUpdateStatuses(db *sql.DB, timeout time.Duration) (map[string][]tc.ServerUpdateStatusV40, error) {
 	dbCtx, dbClose := context.WithTimeout(context.Background(), timeout)
 	defer dbClose()

@@ -230,11 +230,13 @@ func monitorConfigListen(
 		monitorConfig := pollerMonitorCfg.Cfg
 		cdn := pollerMonitorCfg.CDN
 		monitorConfigTS.Set(monitorConfig)
+
 		// todata/todata.go: Update()から呼ばれる
 		if err := toData.Update(toSession, cdn, monitorConfig); err != nil {
 			log.Errorln("Updating Traffic Ops Data: " + err.Error())
 		}
 
+		// 主要なpolling URL3つ(ヘルスチェックURL、統計情報URL、ピアURL)の初期化を行う
 		healthURLs := map[string]poller.PollConfig{}
 		statURLs := map[string]poller.PollConfig{}
 		peerURLs := map[string]poller.PeerPollConfig{}
@@ -257,6 +259,7 @@ func monitorConfigListen(
 			log.Errorf("getting cachegroups to poll: %s", err.Error())
 			continue
 		}
+
 		log.Debugf("this TM's cachegroup: %s, cachegroups to poll: %v", thisTMGroup, cacheGroupsToPoll)
 		for _, srv := range monitorConfig.TrafficServer {
 			cacheName := tc.CacheName(srv.HostName)
@@ -305,10 +308,13 @@ func monitorConfigListen(
 				log.Warnln("profile " + srv.Profile + " health.connection.timeout Parameter is missing or zero, using default " + DefaultHealthConnectionTimeout.String())
 			}
 
+			// ホスト毎のヘルスチェックURLがセットされる。この関数の最後に別チャネルに送信する
 			healthURLs[srv.HostName] = poller.PollConfig{URL: pollURL4Str, URLv6: pollURL6Str, Host: srv.FQDN, Timeout: connTimeout, Format: format, PollType: pollType}
 
 			statURL4 := createServerStatPollURL(pollURL4Str)
 			statURL6 := createServerStatPollURL(pollURL6Str)
+
+			// ホスト毎の統計情報取得URLがセットされる。この関数の最後に別チャネルに送信する
 			statURLs[srv.HostName] = poller.PollConfig{URL: statURL4, URLv6: statURL6, Host: srv.FQDN, Timeout: connTimeout, Format: format, PollType: pollType}
 		}
 
@@ -322,15 +328,20 @@ func monitorConfigListen(
 		}
 
 		for _, srv := range monitorConfig.TrafficMonitor {
+
 			if srv.HostName == staticAppData.Hostname || (cfg.DistributedPolling && srv.Location != thisTMGroup) {
 				continue
 			}
+
 			if srv.ServerStatus != thisTMStatus {
 				continue
 			}
+
 			// TODO: the URL should be config driven. -jse
+			// peerURLは「http://<server>:<port>/publish/CrStates?raw」としてHostName毎に設定される。peerURLsはpeerURLSubscriberチャネル送信時に送付されている
 			peerURL := fmt.Sprintf("http://%s:%d/publish/CrStates?raw", srv.FQDN, srv.Port)
 			peerURLs[srv.HostName] = poller.PeerPollConfig{URLs: []string{peerURL}}
+
 			peerSet[tc.TrafficMonitorName(srv.HostName)] = struct{}{}
 		}
 		distributedPeerURLs := make(map[string]poller.PeerPollConfig)
@@ -348,6 +359,8 @@ func monitorConfigListen(
 		if cfg.StatPolling {
 			statURLSubscriber <- poller.CachePollerConfig{Urls: statURLs, PollingProtocol: cfg.CachePollingProtocol, Interval: intervals.Stat, NoKeepAlive: intervals.StatNoKeepAlive}
 		}
+
+		// Pollingに必要な情報をhealthURLSubscriberチャネルやpeerURLSubscriberチャネルに送付している。
 		healthURLSubscriber <- poller.CachePollerConfig{Urls: healthURLs, PollingProtocol: cfg.CachePollingProtocol, Interval: intervals.Health, NoKeepAlive: intervals.HealthNoKeepAlive}
 		peerURLSubscriber <- poller.PeerPollerConfig{Urls: peerURLs, Interval: intervals.Peer, NoKeepAlive: intervals.PeerNoKeepAlive}
 		if cfg.DistributedPolling {

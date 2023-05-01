@@ -82,6 +82,8 @@ func main() {
 		fmt.Println(strings.Join(plugin.List(), "\n"))
 		os.Exit(0)
 	}
+
+	// --api-routesが指定されていた場合、対象のAPI一覧を表示して終了
 	if *showRoutes {
 		fake := routing.ServerData{Config: config.NewFakeConfig()}
 		routes, _, _ := routing.Routes(fake)
@@ -103,19 +105,26 @@ func main() {
 		}
 		os.Exit(0)
 	}
+
+	// 引数が2つ未満なければエラー。つまり2つは必須
 	if len(os.Args) < 2 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
+	// 引数に--cfg, --dbcfgの設定ファイルを指定する
+	// 初期化に成功すると blockStart = false が入る。失敗すると blockStart = true となる
 	cfg, errsToLog, blockStart := config.LoadConfig(*configFileName, *dbConfigFileName, version)
 	for _, err := range errsToLog {
 		fmt.Fprintf(os.Stderr, "Loading Config: %v\n", err)
 	}
+
+	// config.LoadConfigでの初期化に失敗したらエラーとさせる
 	if blockStart {
 		os.Exit(1)
 	}
 
+	// ログオブジェクトの初期化を行います
 	if err := log.InitCfg(cfg); err != nil {
 		fmt.Printf("Error initializing loggers: %v\n", err)
 		for _, err := range errsToLog {
@@ -127,14 +136,17 @@ func main() {
 		log.Warnln(err)
 	}
 
+	// 主要な設定情報を出力するだけ
 	logConfig(cfg)
 
+	// パスワードのブラックリストが取得できなければエラー
 	err := auth.LoadPasswordBlacklist("app/conf/invalid_passwords.txt")
 	if err != nil {
 		log.Errorf("loading password blacklist: %v\n", err)
 		os.Exit(1)
 	}
 
+	// SSLが必要かどうかを設定値から判定する
 	sslStr := "require"
 	if !cfg.DB.SSL {
 		sslStr = "disable"
@@ -148,19 +160,26 @@ func main() {
 	}
 	defer db.Close()
 
+	// DBへの設定を行う
 	db.SetMaxOpenConns(cfg.MaxDBConnections)
 	db.SetMaxIdleConns(cfg.DBMaxIdleConnections)
 	db.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeSeconds) * time.Second)
 
 	auth.InitUsersCache(time.Duration(cfg.UserCacheRefreshIntervalSec)*time.Second, db.DB, time.Duration(cfg.DBQueryTimeoutSeconds)*time.Second)
+
+	// 定期的にサーバのステータス情報を取得して、更新後のステータスとして保持しておくgoroutineを起動する
 	server.InitServerUpdateStatusCache(time.Duration(cfg.ServerUpdateStatusCacheRefreshIntervalSec)*time.Second, db.DB, time.Duration(cfg.DBQueryTimeoutSeconds)*time.Second)
 
+	// TrafficVaultに関する設定の取得を行う
 	trafficVault := setupTrafficVault(*riakConfigFileName, &cfg)
 
 	// TODO combine
 	plugins := plugin.Get(cfg)
+
+	// 設定: profiling_enabledを取得する
 	profiling := cfg.ProfilingEnabled
 
+	// HTTPサーバ「localhost:6060」として「/db-stats」、「/memory-stats」のプロファイリング用エンドポイントを起動する
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux() // this is so we don't serve pprof over 443.
 
@@ -175,6 +194,8 @@ func main() {
 	}()
 
 	var backendConfig config.BackendConfig
+
+	// --backendcfgでファイルが指定された場合 (一般名称: backends.conf)
 	if *backendConfigFileName != "" {
 		backendConfig, err = config.LoadBackendConfig(*backendConfigFileName)
 		routing.SetBackendConfig(backendConfig)
@@ -183,17 +204,23 @@ func main() {
 		}
 	}
 
+	// APIエンドポイントへの登録に必要なオブジェクトを生成する
 	mux := http.NewServeMux()
 	d := routing.ServerData{DB: db, Config: cfg, Profiling: &profiling, Plugins: plugins, TrafficVault: trafficVault, Mux: mux}
+
+	// APIエンドポイントの登録は下記で行います。
 	if err := routing.RegisterRoutes(d); err != nil {
 		log.Errorf("registering routes: %v\n", err)
 		os.Exit(1)
 	}
 
+	// cfg.PluginSharedConfig=plugin_shared_config
 	plugins.OnStartup(plugin.StartupData{Data: plugin.Data{SharedCfg: cfg.PluginSharedConfig, AppCfg: cfg}})
 
+	// ポート番号のログ出力
 	log.Infof("Listening on " + cfg.Port)
 
+	// HTTPサーバオブジェクトの設定を行う (その後のgoroutineからこのHTTPサーバは起動させる)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		TLSConfig:         cfg.TLSConfig,
@@ -203,24 +230,33 @@ func main() {
 		IdleTimeout:       time.Duration(cfg.IdleTimeout) * time.Second,
 		ErrorLog:          log.Error,
 	}
+
+	// TLS設定がなければ、TLSオブジェクトの空設定を埋め込んでおく
 	if httpServer.TLSConfig == nil {
 		httpServer.TLSConfig = &tls.Config{}
 	}
+
 	// Deprecated in 5.0
+	// 接続時の検証をskipするかどうかを設定により決定する
 	httpServer.TLSConfig.InsecureSkipVerify = cfg.Insecure
 	// end deprecated block
 
+	// goroutineによりHTTPSサーバを起動する
 	go func() {
+
+		// TLSの秘密鍵のパスを取得する
 		if cfg.KeyPath == "" {
 			log.Errorf("key cannot be blank in %s", cfg.ConfigHypnotoad.Listen)
 			os.Exit(1)
 		}
 
+		// TLS証明書のパスを取得する
 		if cfg.CertPath == "" {
 			log.Errorf("cert cannot be blank in %s", cfg.ConfigHypnotoad.Listen)
 			os.Exit(1)
 		}
 
+		// TLS証明書のパスのファイルをopenする
 		if file, err := os.Open(cfg.CertPath); err != nil {
 			log.Errorf("cannot open %s for read: %s", cfg.CertPath, err.Error())
 			os.Exit(1)
@@ -228,31 +264,39 @@ func main() {
 			file.Close()
 		}
 
+		// TLSの秘密鍵のパスのファイルをopenする
 		if file, err := os.Open(cfg.KeyPath); err != nil {
 			log.Errorf("cannot open %s for read: %s", cfg.KeyPath, err.Error())
 			os.Exit(1)
 		} else {
 			file.Close()
 		}
+
+		// HTTPSサーバを起動する
 		httpServer.Handler = mux
 		if err := httpServer.ListenAndServeTLS(cfg.CertPath, cfg.KeyPath); err != nil {
 			log.Errorf("stopping server: %v\n", err)
 			os.Exit(1)
 		}
-	}()
 
-	profilingLocation, err := getProcessedProfilingLocation(cfg.ProfilingLocation, cfg.LogLocationError)
+	}()  // goroutineここまで
+
+	// profilingLocationとcfg.LogLocationErrorのバリデーション処理を行う
+	profilingLocation, err := getProcessedProfilingLocation(cfg.ProfilingLocation, cfg.LogLocationError)  // 設定: profiling_location, log_location_error
 	if err != nil {
 		log.Errorln("unable to determine profiling location: " + err.Error())
 	}
 
+	// 情報の出力
 	log.Infof("profiling location: %s\n", profilingLocation)
 	log.Infof("profiling enabled set to %t\n", profiling)
 
+	// `profiling_enabled=true`の場合、CPUプロファイリングの計測処理が行われる(特定のファイルに書かれる)
 	if profiling {
 		continuousProfile(&profiling, &profilingLocation, cfg.Version)
 	}
 
+	// 次のsignalReload()に引き渡すための無名関数の定義を行う
 	reloadProfilingAndBackendConfig := func() {
 		setNewProfilingInfo(*configFileName, &profiling, &profilingLocation, cfg.Version)
 		backendConfig, err = getNewBackendConfig(backendConfigFileName)
@@ -262,17 +306,25 @@ func main() {
 			routing.SetBackendConfig(backendConfig)
 		}
 	}
+
+	// SIGHUPを受信したらreloadProfilingAndBackendConfigの無名関数が実行される様にする
 	signalReloader(unix.SIGHUP, reloadProfilingAndBackendConfig)
 }
 
 func setupTrafficVault(riakConfigFileName string, cfg *config.Config) trafficvault.TrafficVault {
+
 	var err error
 	trafficVaultConfigBytes := []byte{}
 	trafficVaultBackend := ""
+
+	// --riakcfgが指定されていれば、読み込む
 	if len(riakConfigFileName) > 0 {
 		// use legacy riak config if given
+		// --riakcfgjはdeprecatedなのでその旨を出力する
 		log.Warnln("using deprecated --riakcfg flag, use traffic_vault_backend = riak and traffic_vault_config in cdn.conf instead")
 		trafficVaultConfigBytes, err = ioutil.ReadFile(riakConfigFileName)
+
+		// --riakcfgで指定されたファイルが読み込みできなければエラーとする
 		if err != nil {
 			log.Errorf("reading riak conf '%s': %s", riakConfigFileName, err.Error())
 			os.Exit(1)
@@ -280,28 +332,38 @@ func setupTrafficVault(riakConfigFileName string, cfg *config.Config) trafficvau
 		cfg.TrafficVaultEnabled = true
 		trafficVaultBackend = riaksvc.RiakBackendName
 	}
+
+	// 設定ファイルにtraffic_vault_backendが指定されていれば
 	if len(cfg.TrafficVaultBackend) > 0 {
+
+		// traffic_vault_backendが指定されていないか空の場合
 		if len(cfg.TrafficVaultConfig) == 0 {
 			log.Errorln("traffic_vault_backend is non-empty but traffic_vault_config is empty")
 			os.Exit(1)
 		}
+
 		cfg.TrafficVaultEnabled = true
 		// traffic_vault_config should override legacy riak config if both are used
-		trafficVaultConfigBytes = cfg.TrafficVaultConfig
-		trafficVaultBackend = cfg.TrafficVaultBackend
+		trafficVaultConfigBytes = cfg.TrafficVaultConfig  // traffic_vault_config設定(postgresqlに関するhost, port, pwなど)
+		trafficVaultBackend = cfg.TrafficVaultBackend     // traffic_vault_backend設定("postgres", "riak"などが設定される)
 	}
+
+	// traffic_vault_backend == "riak" でかつ RiakPortが指定されている場合。つまり、Riakに関連する処理
 	if trafficVaultBackend == riaksvc.RiakBackendName && cfg.RiakPort != nil {
 		// inject riak_port into traffic_vault_config.port if unset there
 		log.Warnln("using deprecated field 'riak_port', use 'port' field in traffic_vault_config instead")
 		tmp := make(map[string]interface{})
 		err := json.Unmarshal(trafficVaultConfigBytes, &tmp)
+
 		if err != nil {
 			log.Errorf("failed to unmarshal riak config: %s", err.Error())
 			os.Exit(1)
 		}
+
 		if _, ok := tmp["port"]; !ok {
 			tmp["port"] = *cfg.RiakPort
 		}
+
 		trafficVaultConfigBytes, err = json.Marshal(tmp)
 		if err != nil {
 			log.Errorf("failed to marshal riak config: %s", err.Error())
@@ -353,9 +415,11 @@ func setNewProfilingInfo(configFileName string, currentProfilingEnabled *bool, c
 	}
 }
 
+// errorLogLocationの値をバリデーションし、rawProfilingLocationのパスディレクトリが存在することを検証する。
 func getProcessedProfilingLocation(rawProfilingLocation string, errorLogLocation string) (string, error) {
 	profilingLocation := os.TempDir()
 
+	// errorLogLocationに格納されている値のバリデーションを行う
 	if errorLogLocation != "" && errorLogLocation != log.LogLocationNull && errorLogLocation != log.LogLocationStderr && errorLogLocation != log.LogLocationStdout {
 		errorDir := filepath.Dir(errorLogLocation)
 		if _, err := os.Stat(errorDir); err == nil {
@@ -363,11 +427,13 @@ func getProcessedProfilingLocation(rawProfilingLocation string, errorLogLocation
 		}
 	}
 
+	// 指定されたrawProfilingLocationを元にパスを取得する。rawProfilingLocationの値が空ならば独自で生成する
 	profilingLocation = filepath.Join(profilingLocation, "profiling")
 	if rawProfilingLocation != "" {
 		profilingLocation = rawProfilingLocation
 	} else {
 		//if it isn't a provided location create the profiling directory under the default temp location if it doesn't exist
+		// profilingで指定されたディレクトリがなければ(statが取得できなければ)、生成する。
 		if _, err := os.Stat(profilingLocation); err != nil {
 			err = os.Mkdir(profilingLocation, 0755)
 			if err != nil {
@@ -391,9 +457,13 @@ func reloadProfilingInfo(configFileName string) (bool, string, error) {
 }
 
 func continuousProfile(profiling *bool, profilingDir *string, version string) {
+
+	// profilingが有効で、profiling用ディレクトリの設定が指定されていたら
 	if *profiling && *profilingDir != "" {
 		go func() {
 			for {
+
+				// プロファイル用のファイル名を「tocpu-<version>-<time>.pprof」として生成する
 				now := time.Now().UTC()
 				filename := filepath.Join(*profilingDir, fmt.Sprintf("tocpu-%s-%s.pprof", version, now.Format(time.RFC3339)))
 				f, err := os.Create(filename)
@@ -403,10 +473,14 @@ func continuousProfile(profiling *bool, profilingDir *string, version string) {
 					break
 				}
 
+				// プロファイリングを計測する。 see: https://pkg.go.dev/runtime/pprof
 				pprof.StartCPUProfile(f)
 				time.Sleep(time.Minute)
 				pprof.StopCPUProfile()
+
 				f.Close()
+
+				// profilingはコピーされた変数ではなく、continuousProfile()に渡ってきた参照値を見ているので、falseへの変更があればgoroutineが終了する
 				if !*profiling {
 					break
 				}

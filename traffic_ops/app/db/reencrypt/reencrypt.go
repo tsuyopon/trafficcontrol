@@ -140,13 +140,17 @@ type Config struct {
 }
 
 func readKey(keyLocation string) ([]byte, error) {
+
 	var keyBase64 string
+
+	// 指定されたパスのファイルを読み込みkeyBase64Bytesとして取得する
 	keyBase64Bytes, err := ioutil.ReadFile(keyLocation)
 	if err != nil {
 		return []byte{}, errors.New("reading file '" + keyLocation + "':" + err.Error())
 	}
 	keyBase64 = string(keyBase64Bytes)
 
+	// 指定された秘密鍵パスはBase64でエンコードされているので、デコードする
 	key, err := base64.StdEncoding.DecodeString(keyBase64)
 	if err != nil {
 		return []byte{}, fmt.Errorf("AES key cannot be decoded from base64: %w", err)

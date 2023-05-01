@@ -195,6 +195,7 @@ func CreateRouteMap(rs []Route, disabledRouteIDs []int, perlHandler http.Handler
 		nextMajorVer := r.Version.Major + 1
 		_, isDisabledRoute := disabledRoutes[r.ID]
 		r.SetMiddleware(authBase, requestTimeout)
+
 		for _, version := range versions[versionI:] {
 			if version.Major >= nextMajorVer {
 				break
@@ -441,9 +442,14 @@ func stringVersionToApiVersion(version string) (api.Version, error) {
 }
 
 // RegisterRoutes - parses the routes and registers the handlers with the Go Router
+// TrafficOpsのAPIエンドポイント設定となる主要処理
 func RegisterRoutes(d ServerData) error {
+
+	// **重要** 下記のRoutesでAPIエンドポイントの登録が行われる
+	// routing/routes.goが呼ばれてAPIのRoute情報がrouteSliveに保存される
 	routeSlice, catchall, err := Routes(d)
 	if err != nil {
+		// APIエンドポイントに重複したIDがセットされているか、disabled_routesにセットされたAPIエンドポイントのIDが存在せず、ignore_unknown_routes=falseの場合にはエラーになる
 		return err
 	}
 

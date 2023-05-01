@@ -53,6 +53,7 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 
 	toData := todata.NewThreadsafe()
 
+	// 各種オブジェクトの初期化処理を行います
 	cacheHealthHandler := cache.NewHandler()
 	cacheHealthPoller := poller.NewCache(true, cacheHealthHandler, cfg, appData)
 	cacheStatHandler := cache.NewPrecomputeHandler(toData)

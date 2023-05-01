@@ -517,26 +517,35 @@ func (p *Postgres) GetBucketKey(bucket string, key string, tx *sql.Tx) ([]byte, 
 }
 
 func init() {
+	// ここで「postgres」をプラグインとして登録する。trafficvault.goのAddBackend()で登録され、GetBackend()でここで指定したプラグインがロードされる
 	trafficvault.AddBackend(postgresBackendName, postgresLoad)
 }
 
+// 「posgres」が呼ばれた場合のプラグイン
+// PostgreSQLの設定バリデーション、接続作業、初期設定などを行います。
 func postgresLoad(b json.RawMessage) (trafficvault.TrafficVault, error) {
 	pgCfg := Config{}
+
 	if err := json.Unmarshal(b, &pgCfg); err != nil {
 		return nil, errors.New("unmarshalling Postgres config: " + err.Error())
 	}
+
 	if err := validateConfig(pgCfg); err != nil {
 		return nil, errors.New("validating Postgres config: " + err.Error())
 	}
+
 	if pgCfg.MaxIdleConnections == 0 {
 		pgCfg.MaxIdleConnections = defaultMaxIdleConnections
 	}
+
 	if pgCfg.ConnMaxLifetimeSeconds == 0 {
 		pgCfg.ConnMaxLifetimeSeconds = defaultConnMaxLifetimeSeconds
 	}
+
 	if pgCfg.QueryTimeoutSeconds == 0 {
 		pgCfg.QueryTimeoutSeconds = defaultDBQueryTimeoutSecs
 	}
+
 	if pgCfg.HashiCorpVault != nil {
 		if pgCfg.HashiCorpVault.LoginPath == "" {
 			pgCfg.HashiCorpVault.LoginPath = defaultHashiCorpVaultLoginPath
@@ -546,20 +555,28 @@ func postgresLoad(b json.RawMessage) (trafficvault.TrafficVault, error) {
 		}
 	}
 
+	// 設定によってPostgreSQLの設定にSSLが必要かどうかを判断する
 	sslStr := "require"
 	if !pgCfg.SSL {
 		sslStr = "disable"
 	}
+
+	// PostgreSQLのOpen設定
 	db, err := sqlx.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s&fallback_application_name=trafficvault", pgCfg.User, pgCfg.Password, pgCfg.Hostname, pgCfg.Port, pgCfg.DBName, sslStr))
 	if err != nil {
 		return nil, errors.New("opening database: " + err.Error())
 	}
+
+	// 基本的なDB設定
 	db.SetMaxOpenConns(pgCfg.MaxConnections)
 	db.SetMaxIdleConns(pgCfg.MaxIdleConnections)
 	db.SetConnMaxLifetime(time.Duration(pgCfg.ConnMaxLifetimeSeconds) * time.Second)
 
+	// タイムアウト設定
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pgCfg.QueryTimeoutSeconds)*time.Second)
 	defer cancel()
+
+	// sql.Open をした時点では接続ははられておらず、DB.PingContext などで接続チェックをしたほうがよいとのこと。see: https://please-sleep.cou929.nu/go-sql-db-connection-pool.html
 	if err := db.PingContext(ctx); err != nil {
 		// NOTE: not fatal since Traffic Vault not being available at startup shouldn't be fatal
 		log.Errorln("pinging the Traffic Vault database: " + err.Error())
@@ -567,11 +584,13 @@ func postgresLoad(b json.RawMessage) (trafficvault.TrafficVault, error) {
 		log.Infoln("successfully pinged the Traffic Vault database")
 	}
 
+	// reencrypt.go: readKey()が呼ばれ、pgCfgのパスをBase64デコードしてAESの秘密鍵を取得する
 	aesKey, err := readKey(pgCfg)
 	if err != nil {
 		return nil, err
 	}
 
+	// Postgres用の構造体オブジェクトを返却する
 	return &Postgres{cfg: pgCfg, db: db, aesKey: aesKey}, nil
 }
 

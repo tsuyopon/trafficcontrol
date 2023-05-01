@@ -86,9 +86,12 @@ func astatsParse(cacheName string, rdr io.Reader, pollCTX interface{}) (Statisti
 			return stats, nil, err
 		}
 
+		// astats.System.ProcNetDevには/proc/net/devの値が入る (例: 「"eth0: 130906498  567870    0    3    0     0          0         ...+60 more"」)
 		if err := stats.AddInterfaceFromRawLine(astats.System.ProcNetDev); err != nil {
 			return stats, nil, fmt.Errorf("failed to parse interface line for cache '%s': %v", cacheName, err)
 		}
+
+		// astats.System.InfNameにはeth0のようなI/F名が入る
 		if inf, ok := stats.Interfaces[astats.System.InfName]; !ok {
 			return stats, nil, errors.New("/proc/net/dev line didn't match reported interface line")
 		} else {
@@ -96,6 +99,7 @@ func astatsParse(cacheName string, rdr io.Reader, pollCTX interface{}) (Statisti
 			stats.Interfaces[astats.System.InfName] = inf
 		}
 
+		// astats.System.ProcLoadavgには/proc/loadavgの値が入る(例「"0.86 1.31 1.42 15/46266 5876"」)
 		if load, err := LoadavgFromRawLine(astats.System.ProcLoadavg); err != nil {
 			return stats, nil, fmt.Errorf("failed to parse loadavg line for cache '%s': %v", cacheName, err)
 		} else {

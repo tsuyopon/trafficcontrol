@@ -140,6 +140,8 @@ func StartOpsConfigManager(
 		// 設定「httpsListener」が空でなければ
 		if newOpsConfig.HttpsListener != "" {
 			httpsListenAddress := newOpsConfig.HttpsListener
+
+			// StaticFileDir="/opt/traffic_monitor/static/"
 			err = httpServer.RunHTTPSRedirect(listenAddress, httpsListenAddress, cfg.ServeReadTimeout, cfg.ServeWriteTimeout, cfg.StaticFileDir)
 			if err != nil {
 				handleErr(fmt.Errorf("MonitorConfigPoller: error creating HTTP server: %s\n", err))

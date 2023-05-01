@@ -253,7 +253,7 @@ func (s *TrafficOpsSessionThreadsafe) Update(
 	session, _, err := client.LoginWithAgent(url, username, password, insecure, userAgent, useCache, timeout)
 	if err != nil {
 		log.Errorf("logging in using up-to-date client: %v", err)
-		legacySession, _, err := legacyClient.LoginWithAgent(url, username, password, insecure, userAgent, useCache, timeout)
+		legacySession, _, err := legacyClient.LoginWithAgent(url, username, password, insecure, userAgent, useCache, timeout)  // legacyClientはv3-clientを指す
 		if err != nil || legacySession == nil {
 			err = fmt.Errorf("logging in using legacy client: %v", err)
 			return err
@@ -295,7 +295,7 @@ func (s *TrafficOpsSessionThreadsafe) setLegacySession(url, username, password s
 	if err != nil {
 		return err
 	}
-	to := legacyClient.NewSession(username, password, url, userAgent, &http.Client{
+	to := legacyClient.NewSession(username, password, url, userAgent, &http.Client{  // legacyClientはv3-clientを指す
 		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
@@ -322,6 +322,7 @@ func (s TrafficOpsSessionThreadsafe) get() *client.Session {
 	return *s.session
 }
 
+// legacyはv3-clientを指す
 func (s TrafficOpsSessionThreadsafe) getLegacy() *legacyClient.Session {
 	s.m.Lock()
 	defer s.m.Unlock()
@@ -340,13 +341,20 @@ func (s TrafficOpsSessionThreadsafe) CRConfigHistory() []CRConfigStat {
 // CRConfigValid checks if the passed tc.CRConfig structure is valid, and
 // ensures that it is from the same CDN as the last CRConfig Snapshot, as well
 // as that it is newer than the last CRConfig Snapshot.
+// 引数として渡されたtc.CRConfigオブジェクトが正当なオブジェクトかどうかのチェックを行います。
 func (s *TrafficOpsSessionThreadsafe) CRConfigValid(crc *tc.CRConfig, cdn string) error {
+
+	// crc自体がnilならばinvalid
 	if crc == nil {
 		return errors.New("CRConfig is nil")
 	}
+
+	// CDNNameの有無
 	if crc.Stats.CDNName == nil {
 		return errors.New("CRConfig.Stats.CDN missing")
 	}
+
+	// Stats.Dateが含まれているかの有無
 	if crc.Stats.DateUnixSeconds == nil {
 		return errors.New("CRConfig.Stats.Date missing")
 	}
@@ -389,24 +397,31 @@ func (s TrafficOpsSessionThreadsafe) CRConfigRaw(cdn string) ([]byte, error) {
 	if ss == nil {
 		return nil, ErrNilSession
 	}
+
+	// 「/cdns/<cdn>/snapshot (GET)」にリクエストする
 	response, reqInf, err := ss.GetCRConfig(cdn, client.RequestOptions{})
 	if reqInf.RemoteAddr != nil {
 		remoteAddr = reqInf.RemoteAddr.String()
 	}
-	if err != nil {
+
+	if err != nil { // リクエスト時にエラーの場合。legacy API(v3-client)の処理になる。
 		log.Warnln("getting CRConfig from Traffic Ops using up-to-date client: " + err.Error() + ". Retrying with legacy client")
 		ls := s.getLegacy()
 		if ls == nil {
 			return nil, ErrNilSession
 		}
+
 		configBytes, reqInf, err = ls.GetCRConfig(cdn)
 		if reqInf.RemoteAddr != nil {
 			remoteAddr = reqInf.RemoteAddr.String()
 		}
+
 		if err != nil {
 			log.Errorln("getting CRConfig from Traffic Ops using legacy client: " + err.Error() + ". Checking for backup")
 		}
+
 	} else {
+
 		crConfig = &response.Response
 		configBytes, err = json.Marshal(crConfig)
 		if err != nil {
@@ -415,14 +430,16 @@ func (s TrafficOpsSessionThreadsafe) CRConfigRaw(cdn string) ([]byte, error) {
 		}
 	}
 
-	if err == nil {
+	if err == nil {  // 正常終了の場合
 		log.Infoln("successfully got CRConfig from Traffic Ops. Writing to backup file")
 		if wErr := ioutil.WriteFile(s.CRConfigBackupFile, configBytes, 0644); wErr != nil {
 			log.Errorf("failed to write CRConfig backup file: %v", wErr)
 		}
-	} else {
+	} else {  // 異常終了の場合
 		if s.BackupFileExists() {
 			log.Errorln("using backup file for CRConfig snapshot due to error fetching CRConfig snapshot from Traffic Ops: " + err.Error())
+			
+			// バックアップファイル(デフォルト: /opt/traffic_monitor/crconfig.backup, crconfig_backup_file設定)からマッピングを生成する
 			configBytes, err = ioutil.ReadFile(s.CRConfigBackupFile)
 			if err != nil {
 				return nil, fmt.Errorf("reading CRConfig backup file: %v", err)
@@ -451,6 +468,7 @@ func (s TrafficOpsSessionThreadsafe) CRConfigRaw(cdn string) ([]byte, error) {
 	}
 	hist.Stats = crConfig.Stats
 
+	// crConfigオブジェクトが正当なオブジェクトかどうかをチェックする
 	if err = s.CRConfigValid(crConfig, cdn); err != nil {
 		err = errors.New("invalid CRConfig: " + err.Error())
 		hist.Err = err
@@ -487,7 +505,7 @@ func (s TrafficOpsSessionThreadsafe) fetchTMConfig(cdn string) (*tc.TrafficMonit
 }
 
 func (s TrafficOpsSessionThreadsafe) fetchLegacyTMConfig(cdn string) (*tc.TrafficMonitorConfig, error) {
-	ss := s.getLegacy()
+	ss := s.getLegacy()  // v3-client版。v4-clientだとs.get()などで表される。
 	if ss == nil {
 		return nil, ErrNilSession
 	}
@@ -505,11 +523,13 @@ func (s TrafficOpsSessionThreadsafe) fetchLegacyTMConfig(cdn string) (*tc.Traffi
 // is filled in by `LegacyTrafficMonitorConfigMap`. This is safe for multiple
 // goroutines.
 func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc.TrafficMonitorConfigMap, error) {
+
 	var config *tc.TrafficMonitorConfig
 	var configMap *tc.TrafficMonitorConfigMap
 	var err error
 
-	config, err = s.fetchTMConfig(cdn) // 「/cdns/<cdn>/configs/monitoring」(GET)から取得する
+	// 「/cdns/<cdn>/configs/monitoring」(GET)から取得する
+	config, err = s.fetchTMConfig(cdn)
 	if err != nil {
 		log.Warnln("getting Traffic Monitor config from Traffic Ops using up-to-date client: " + err.Error() + ". Retrying with legacy client")
 		config, err = s.fetchLegacyTMConfig(cdn)
@@ -555,6 +575,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 		return tc.TrafficMonitorTransformToMap(&tmConfig)
 	}
 
+	// jsoniter.ConfigFastestを利用すると、6桁の精度（非可逆）でfloatをマーシャリングするので、大幅に高速化されます。
 	json := jsoniter.ConfigFastest
 	data, err := json.Marshal(*config)  // jsonに変換する
 

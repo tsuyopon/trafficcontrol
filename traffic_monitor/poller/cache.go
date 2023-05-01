@@ -64,10 +64,12 @@ func NewCache(
 	cfg config.Config,
 	appData config.StaticAppData,
 ) CachePoller {
+
 	var tickChan chan uint64
 	if tick {
 		tickChan = make(chan uint64)
 	}
+
 	return CachePoller{
 		TickChan:      tickChan,
 		ConfigChannel: make(chan CachePollerConfig),
@@ -95,12 +97,18 @@ func (p CachePoller) Poll() {
 	// なお、range deletionsの中ではdiffConfigsでdeletionsと判定された特定のidからkillChans配列から取得してkillChanに格納して、キャンセル用として送信しています。
 	killChans := map[string]chan<- struct{}{}
 	for newConfig := range p.ConfigChannel {
+
+		// 古い設定と新しい設定を比較します。なくなった設定はdeletionsに、新しく追加した設定はadditionsに追加されます。。
 		deletions, additions := diffConfigs(p.Config, newConfig)
+
+		// deletionsへの処理
 		for _, id := range deletions {
 			killChan := killChans[id]
 			go func() { killChan <- struct{}{} }() // go - we don't want to wait for old polls to die.
 			delete(killChans, id)
 		}
+
+		// additionsへの処理
 		for _, info := range additions {
 			kill := make(chan struct{})
 			killChans[info.ID] = kill
@@ -118,19 +126,21 @@ func (p CachePoller) Poll() {
 				NoKeepAlive: info.NoKeepAlive,
 				PollerID:    info.ID,
 			}
+
 			pollerCtx := interface{}(nil)
 			if pollerObj.Init != nil {
 				pollerCtx = pollerObj.Init(pollerCfg, p.GlobalContexts[info.PollType])
 			}
+
 			go poller(info.Interval, info.ID, info.PollingProtocol, info.URL, info.URLv6, info.Host, info.Format, p.Handler, pollerObj.Poll, pollerCtx, kill)
+
 		}
 		p.Config = newConfig
 	}
 }
 
 // TODO iterationCount and/or p.TickChan?
-// この関数は poller/cache.go: Poll()から飲み呼ばれる
-// この関数の中で
+// この関数は poller/cache.go: Poll()からのみ呼ばれる
 func poller(
 	interval time.Duration,
 	id string,
@@ -220,6 +230,7 @@ func diffConfigs(old CachePollerConfig, new CachePollerConfig) ([]string, []Cach
 		return deletions, additions
 	}
 
+	// old.Urlsには"edge", "mid-02", "mid-01"のそれぞれのオブジェクトでイテレーションされる
 	for id, oldPollCfg := range old.Urls {
 		newPollCfg, newIdExists := new.Urls[id]
 		if !newIdExists {

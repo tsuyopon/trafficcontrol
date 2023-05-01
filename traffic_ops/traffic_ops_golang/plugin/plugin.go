@@ -47,10 +47,13 @@ func Get(appCfg config.Config) Plugins {
 }
 
 func getEnabled(enabled []string) pluginsSlice {
+
+	// struct{}は空の型を表し、struct{}{}は空の値を表す。代入する場合には struct{}{} にする必要がある
 	enabledM := map[string]struct{}{}
 	for _, name := range enabled {
 		enabledM[name] = struct{}{}
 	}
+
 	enabledPlugins := pluginsSlice{}
 	for _, plugin := range initPlugins {
 		if _, ok := enabledM[plugin.info.Name]; !ok {
@@ -60,6 +63,7 @@ func getEnabled(enabled []string) pluginsSlice {
 		log.Infoln("plugin enabling: '" + plugin.info.Name + "'")
 		enabledPlugins = append(enabledPlugins, plugin)
 	}
+
 	sort.Sort(enabledPlugins)
 	return enabledPlugins
 }
@@ -181,7 +185,7 @@ func (ps plugins) OnStartup(d StartupData) {
 		}
 		d.Ctx = ps.ctx[p.info.Name]
 		d.Cfg = ps.cfg[p.info.Name]
-		p.funcs.onStartup(d)
+		p.funcs.onStartup(d)   // AddPluginのプラグイン関数設定時にonStartupの値は自動的に決まる。
 	}
 }
 
