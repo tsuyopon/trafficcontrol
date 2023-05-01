@@ -70,11 +70,14 @@ func NewPeer(
 	cfg config.Config,
 	appData config.StaticAppData,
 ) PeerPoller {
+
+	// PeerPollerオブジェクトが返却される
 	return PeerPoller{
-		ConfigChannel:  make(chan PeerPollerConfig),
+		ConfigChannel:  make(chan PeerPollerConfig),      // チャネル
 		GlobalContexts: GetGlobalContexts(cfg, appData),
 		Handler:        handler,
 	}
+
 }
 
 type PeerPollInfo struct {
@@ -86,13 +89,16 @@ type PeerPollInfo struct {
 
 func (p PeerPoller) Poll() {
 	killChans := map[string]chan<- struct{}{}
+
 	for newConfig := range p.ConfigChannel {
 		deletions, additions := diffPeerConfigs(p.Config, newConfig)
+
 		for _, id := range deletions {
 			killChan := killChans[id]
 			go func() { killChan <- struct{}{} }() // go - we don't want to wait for old polls to die.
 			delete(killChans, id)
 		}
+
 		for _, info := range additions {
 			kill := make(chan struct{})
 			killChans[info.ID] = kill

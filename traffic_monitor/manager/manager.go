@@ -64,28 +64,42 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 	distributedPeerHandler := peer.NewHandler()
 	distributedPeerPoller := poller.NewPeer(distributedPeerHandler, cfg, appData)
 
+	// poller/monitorconfig.goのPoll()が呼ばれる
 	go monitorConfigPoller.Poll()
 
+	// poller/cache.goのPoll()が呼ばれる(NewCache呼び出し時に第１引数trueなのでチャネルは生成される)
 	go cacheHealthPoller.Poll()
 
+	// 設定値`stat_polling=true`の場合
 	if cfg.StatPolling {
+		// poller/cache.goのPoll()が呼ばれる(NewCache呼び出し時に第１引数falseなのでチャネルは生成されない)
 		go cacheStatPoller.Poll()
 	}
 
+	// poller/peer.goのPoll()が呼ばれる
 	go peerPoller.Poll()
+
+	// 設定値`distributed_polling=true`の場合
 	if cfg.DistributedPolling {
+		// poller/peer.goのPoll()が呼ばれる
 		go distributedPeerPoller.Poll()
 	}
 
-	events := health.NewThreadsafeEvents(cfg.MaxEvents)
+	events := health.NewThreadsafeEvents(cfg.MaxEvents)  // 設定値`max_events`の値を指定する
 
+	// 「chan struct{}」は空のチャネルの定義です
 	var cachesChangedForStatMgr chan struct{}
 	var cachesChangedForHealthMgr chan struct{}
 	var cachesChanged chan struct{}
+
+
+	// 設定値`stat_polling=true`の場合
 	if cfg.StatPolling {
+		// Stat系変数の設定
 		cachesChangedForStatMgr = make(chan struct{})
 		cachesChanged = cachesChangedForStatMgr
 	} else {
+		// Health系変数の設定
 		cachesChangedForHealthMgr = make(chan struct{})
 		cachesChanged = cachesChangedForHealthMgr
 	}
@@ -144,7 +158,7 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 	)
 
 	StartDistributedPeerManager(
-		distributedPeerHandler.ResultChannel,
+		distributedPeerHandler.ResultChannel, // peer/peer.goのHandleから送信される
 		localStates,
 		distributedPeerStates,
 		events,

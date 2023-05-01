@@ -91,38 +91,47 @@ type AuthBase struct {
 // GetWrapper returns a Middleware which performs authentication of the current user at the given privilege level.
 // The returned Middleware also adds the auth.CurrentUser object to the request context, which may be retrieved by a handler via api.NewInfo or auth.GetCurrentUser.
 func (a AuthBase) GetWrapper(privLevelRequired int) Middleware {
+
 	if a.Override != nil {
 		return a.Override
 	}
+
 	return func(handlerFunc http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+
 			user, userErr, sysErr, errCode := api.GetUserFromReq(w, r, a.Secret)
 			if userErr != nil || sysErr != nil {
 				api.HandleErr(w, r, nil, errCode, userErr, sysErr)
 				return
 			}
+
 			ctx := r.Context()
 			cfg, err := api.GetConfig(ctx)
 			if err != nil {
 				api.HandleErr(w, r, nil, http.StatusInternalServerError, nil, fmt.Errorf("getting configuration from request context: %w", err))
 				return
 			}
+
 			v := api.GetRequestedAPIVersion(r.URL.Path)
 			if v == nil {
 				api.HandleErr(w, r, nil, http.StatusBadRequest, errors.New("couldn't get a valid version from the requested path"), nil)
 				return
 			}
+
 			if v.Major < 4 {
+				// APIのメジャーバージョンが4未満の場合
 				if user.PrivLevel < privLevelRequired {
 					api.HandleErr(w, r, nil, http.StatusForbidden, errors.New("Forbidden."), nil)
 					return
 				}
 			} else {
+				// APIのメジャーバージョンが4以上の場合。この場合には`role_based_permissions=false` かつ 権限レベルを満たしていない場合にはForbiddenとなる。
 				if !cfg.RoleBasedPermissions && user.PrivLevel < privLevelRequired {
 					api.HandleErr(w, r, nil, http.StatusForbidden, errors.New("Forbidden."), nil)
 					return
 				}
 			}
+
 			api.AddUserToReq(r, user)
 			handlerFunc(w, r)
 		}

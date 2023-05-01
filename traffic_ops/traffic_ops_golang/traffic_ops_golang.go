@@ -86,17 +86,29 @@ func main() {
 	// --api-routesが指定されていた場合、対象のAPI一覧を表示して終了
 	if *showRoutes {
 		fake := routing.ServerData{Config: config.NewFakeConfig()}
+
+		// APIで定義されている全エンドポイントの情報(IDなど含む)を取得する
 		routes, _, _ := routing.Routes(fake)
+
+		// cdn.confが指定されている場合と指定されていない場合
 		if len(*configFileName) != 0 {
+
+			// cdn.confの情報を読み込む
 			cfg, err := config.LoadCdnConfig(*configFileName)
 			if err != nil {
 				fmt.Printf("Loading cdn config from '%s': %v", *configFileName, err)
 				os.Exit(1)
 			}
+
+			// 設定ファイル中のdisabled_routesにIDが指定されていたら、disableされたエンドポイントであることを示す。
+			// 指定されたIDのエンドポイントは無効化できることを表します。
 			disabledRoutes := routing.GetRouteIDMap(cfg.DisabledRoutes)
 			for _, r := range routes {
 				_, isDisabled := disabledRoutes[r.ID]
-				fmt.Printf("%s\tis_disabled=%t\n", r, isDisabled)
+
+				// rによってid, method, versio, pathなども出力される。これはrouting/routing.goに「func (r Route) String() string」 が出力フォーマットとして定義されているから。
+				// 例:  id=541357729077	method=GET	version=4.0	path=OC/FCI/advertisement/?$
+				fmt.Printf("%s\tis_disabled=%t\n", r, isDisabled) 
 			}
 		} else {
 			for _, r := range routes {
@@ -132,6 +144,8 @@ func main() {
 		}
 		os.Exit(1)
 	}
+
+	// 設定読み込み時に何か警告があれば出力しておきう
 	for _, err := range errsToLog {
 		log.Warnln(err)
 	}
@@ -161,10 +175,11 @@ func main() {
 	defer db.Close()
 
 	// DBへの設定を行う
-	db.SetMaxOpenConns(cfg.MaxDBConnections)
-	db.SetMaxIdleConns(cfg.DBMaxIdleConnections)
-	db.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeSeconds) * time.Second)
+	db.SetMaxOpenConns(cfg.MaxDBConnections)     // max_db_connections設定
+	db.SetMaxIdleConns(cfg.DBMaxIdleConnections) // db_max_idle_connections設定
+	db.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeSeconds) * time.Second)  // db_conn_max_lifetime_seconds設定
 
+	// 定期的にユーザー情報+ 権限情報をキャッシュするためにgoroutineを起動します
 	auth.InitUsersCache(time.Duration(cfg.UserCacheRefreshIntervalSec)*time.Second, db.DB, time.Duration(cfg.DBQueryTimeoutSeconds)*time.Second)
 
 	// 定期的にサーバのステータス情報を取得して、更新後のステータスとして保持しておくgoroutineを起動する
@@ -182,10 +197,10 @@ func main() {
 	// HTTPサーバ「localhost:6060」として「/db-stats」、「/memory-stats」のプロファイリング用エンドポイントを起動する
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux() // this is so we don't serve pprof over 443.
-
 	pprofMux.Handle("/db-stats", routing.DBStatsHandler(db))
 	pprofMux.Handle("/memory-stats", routing.MemoryStatsHandler())
 	go func() {
+		// デバッグ用HTTPサーバ
 		debugServer := http.Server{
 			Addr:    "localhost:6060",
 			Handler: pprofMux,
@@ -196,6 +211,7 @@ func main() {
 	var backendConfig config.BackendConfig
 
 	// --backendcfgでファイルが指定された場合 (一般名称: backends.conf)
+	// backends.confファイルによって特定のエンドポイントパスや特定のメソッドにリクエストがきた場合には、バックエンドサーバへの振り分けを行うことができる。API認可も制御できる。
 	if *backendConfigFileName != "" {
 		backendConfig, err = config.LoadBackendConfig(*backendConfigFileName)
 		routing.SetBackendConfig(backendConfig)
@@ -250,7 +266,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		// TLS証明書のパスを取得する
+		// TLS用のX509証明書のパスを取得する
 		if cfg.CertPath == "" {
 			log.Errorf("cert cannot be blank in %s", cfg.ConfigHypnotoad.Listen)
 			os.Exit(1)
@@ -287,7 +303,7 @@ func main() {
 		log.Errorln("unable to determine profiling location: " + err.Error())
 	}
 
-	// 情報の出力
+	// プロファイリング情報をログに出力する
 	log.Infof("profiling location: %s\n", profilingLocation)
 	log.Infof("profiling enabled set to %t\n", profiling)
 
@@ -299,6 +315,8 @@ func main() {
 	// 次のsignalReload()に引き渡すための無名関数の定義を行う
 	reloadProfilingAndBackendConfig := func() {
 		setNewProfilingInfo(*configFileName, &profiling, &profilingLocation, cfg.Version)
+
+		// 指定されたbackend設定ファイルを構造体に変換して、セットする
 		backendConfig, err = getNewBackendConfig(backendConfigFileName)
 		if err != nil {
 			log.Errorf("could not reload backend config: %v", err)
@@ -383,15 +401,21 @@ func setupTrafficVault(riakConfigFileName string, cfg *config.Config) trafficvau
 }
 
 func getNewBackendConfig(backendConfigFileName *string) (config.BackendConfig, error) {
+
+	// 設定ファイルがnilならばエラー
 	if backendConfigFileName == nil {
 		return config.BackendConfig{}, errors.New("no backend config filename")
 	}
+
 	log.Infof("setting new backend config to %s", *backendConfigFileName)
+
+	// 設定ファイルをunmarshalする
 	backendConfig, err := config.LoadBackendConfig(*backendConfigFileName)
 	if err != nil {
 		log.Errorf("error reloading config: %v", err)
 		return backendConfig, err
 	}
+
 	return backendConfig, nil
 }
 
@@ -491,7 +515,7 @@ func continuousProfile(profiling *bool, profilingDir *string, version string) {
 
 func signalReloader(sig os.Signal, f func()) {
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, sig)
+	signal.Notify(c, sig)  // ここでシグナルを受信するまでwaitする
 	for range c {
 		log.Debugln("received SIGHUP")
 		f()
@@ -499,6 +523,7 @@ func signalReloader(sig os.Signal, f func()) {
 }
 
 func logConfig(cfg config.Config) {
+	// 設定に関するログをINFOレベルのログとして出力する
 	log.Infof(`Using Config values:
 		Port:                 %s
 		Db Server:            %s

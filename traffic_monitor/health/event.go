@@ -77,8 +77,13 @@ func copyEvents(a []Event) []Event {
 
 // NewEvents creates a new single-writer-multiple-reader Threadsafe object
 func NewThreadsafeEvents(maxEvents uint64) ThreadsafeEvents {
+
+	// iはuint64型のゼロ値で初期化される
 	i := uint64(0)
+
+	// nextIndexにはiのメモリアドレスが設定されることになります。
 	return ThreadsafeEvents{m: &sync.RWMutex{}, events: &[]Event{}, nextIndex: &i, max: maxEvents}
+
 }
 
 // Get returns the internal slice of Events for reading. This MUST NOT be modified. If modification is necessary, copy the slice.
@@ -90,17 +95,30 @@ func (o *ThreadsafeEvents) Get() []Event {
 
 // Add adds the given event. This is threadsafe for one writer, multiple readers. This MUST NOT be called by multiple threads, as it non-atomically fetches and adds.
 func (o *ThreadsafeEvents) Add(e Event) {
+
 	// host="hostname", type=EDGE, available=true, msg="REPORTED - available"
 	log.Eventf(time.Time(e.Time), "host=\"%s\", type=%s, available=%t, msg=\"%s\"", e.Hostname, e.Type, e.Available, e.Description)
 	o.m.Lock() // TODO test removing
 	events := copyEvents(*o.events)
+
+	// メモリアドレスの値なので最初は「uint64(0)」で初期化されているので「０」を指す。後で「*o.nextIndex++」により値がインクリメントされる
 	e.Index = *o.nextIndex
+
+	// eventsに[]Event{e}を登録する
 	events = append([]Event{e}, events...)
+
+	// 指定した最大イベント数を超過している場合には
 	if len(events) > int(o.max) {
+		// 以下の行はスライスの末尾から切り捨てられます。以下の例ではo.max(o.max -1 + 1)番目以降の要素は切り捨てられます。
 		events = (events)[:o.max-1]
 	}
+
 	// o.m.Lock()
+	// 最大イベント数により切り詰め作業を行なってから、event全体への差し替え作業を行います
 	*o.events = events
+
+	// index値を上書きします。TODO: イベントが追加される度にインクリメントしている? 何にこの値を使っているのか?
 	*o.nextIndex++
+
 	o.m.Unlock()
 }

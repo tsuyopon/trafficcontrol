@@ -95,13 +95,18 @@ func (r Route) String() string {
 // SetMiddleware sets up a Route's Middlewares to include the default set of
 // Middlewares if necessary.
 func (r *Route) SetMiddleware(authBase middleware.AuthBase, requestTimeout time.Duration) {
+
 	if r.Middlewares == nil {
 		r.Middlewares = middleware.GetDefault(authBase.Secret, requestTimeout)
 	}
+
+	// 認証済み
 	if r.Authenticated { // a privLevel of zero is an unauthenticated endpoint.
 		authWrapper := authBase.GetWrapper(r.RequiredPrivLevel)
 		r.Middlewares = append(r.Middlewares, authWrapper)
 	}
+
+	// 認証が必要な場合
 	r.Middlewares = append(r.Middlewares, middleware.RequiredPermissionsMiddleware(r.RequiredPermissions))
 }
 
@@ -181,29 +186,43 @@ type PathHandler struct {
 
 // CreateRouteMap returns a map of methods to a slice of paths and handlers; wrapping the handlers in the appropriate middleware. Uses Semantic Versioning: routes are added to every subsequent minor version, but not subsequent major versions. For example, a 1.2 route is added to 1.3 but not 2.1. Also truncates '2.0' to '2', creating succinct major versions.
 // Returns the map of routes, and a map of API versions served.
+//
+// 第３引数のperlHandlerは特に使われてなさそう
 func CreateRouteMap(rs []Route, disabledRouteIDs []int, perlHandler http.HandlerFunc, authBase middleware.AuthBase, reqTimeOutSeconds int) (map[string][]PathHandler, map[api.Version]struct{}) {
+
 	// TODO strong types for method, path
 	versions := getSortedRouteVersions(rs)
+
+	// TODO: 不明
 	requestTimeout := middleware.DefaultRequestTimeout
 	if reqTimeOutSeconds > 0 {
 		requestTimeout = time.Second * time.Duration(reqTimeOutSeconds)
 	}
+
+	// disabled_routes設定されたIDを元に配列を形成する
 	disabledRoutes := GetRouteIDMap(disabledRouteIDs)
 	m := map[string][]PathHandler{}
+
+	// APIエンドポイント毎のrange
 	for _, r := range rs {
 		versionI := indexOfApiVersion(versions, r.Version)
 		nextMajorVer := r.Version.Major + 1
 		_, isDisabledRoute := disabledRoutes[r.ID]
 		r.SetMiddleware(authBase, requestTimeout)
 
+		// バージョン毎のrange
 		for _, version := range versions[versionI:] {
 			if version.Major >= nextMajorVer {
 				break
 			}
+
 			vstr := strconv.FormatUint(version.Major, 10) + "." + strconv.FormatUint(version.Minor, 10)
+
+			// "^api/<v>/<path>"
 			path := RoutePrefix + "/" + vstr + "/" + r.Path
 
 			if isDisabledRoute {
+				// disabled_routesされている場合には、DisabledRouteHandler()というリクエストを禁止するメッセージのエンドポイントを設定する
 				m[r.Method] = append(m[r.Method], PathHandler{Path: path, Handler: middleware.WrapAccessLog(authBase.Secret, middleware.DisabledRouteHandler()), ID: r.ID})
 			} else {
 				m[r.Method] = append(m[r.Method], PathHandler{Path: path, Handler: middleware.Use(r.Handler, r.Middlewares), ID: r.ID})
@@ -288,6 +307,7 @@ func Handler(
 		catchall.ServeHTTP(w, r)
 		return
 	}
+
 	for _, compiledRoute := range mRoutes {
 		match := compiledRoute.Regex.FindStringSubmatch(requested)
 		if len(match) == 0 {
@@ -304,13 +324,17 @@ func Handler(
 		compiledRoute.Handler(w, r)
 		return
 	}
+
+	// リクエストされたAPIが不明なバージョンを含む場合にはNotImplementedHandler()が呼ばれる
 	if IsRequestAPIAndUnknownVersion(r, versions) {
 		h := middleware.WrapAccessLog(cfg.Secrets[0], middleware.NotImplementedHandler())
 		h.ServeHTTP(w, r)
 		return
 	}
+
 	var backendRouteHandled bool
 	backendConfig := GetBackendConfig()
+	// 下記のロジックは--backendにより設定が追加された場合の処理
 	for i, backendRoute := range backendConfig.Routes {
 		var params []string
 		routeParams := map[string]string{}
@@ -332,6 +356,8 @@ func Handler(
 			for i, v := range params {
 				routeParams[v] = match[i+1]
 			}
+
+			// 
 			if backendRoute.Opts.Algorithm == "" || backendRoute.Opts.Algorithm == "roundrobin" {
 				index := backendRoute.Index % len(backendRoute.Hosts)
 				host := backendRoute.Hosts[index]
@@ -369,6 +395,7 @@ func Handler(
 			}
 		}
 	}
+
 	if !backendRouteHandled {
 		catchall.ServeHTTP(w, r)
 	}
@@ -404,40 +431,61 @@ func HandleBackendRoute(cfg *config.Config, route config.BackendRoute, w http.Re
 
 // IsRequestAPIAndUnknownVersion returns true if the request starts with `/api` and is a version not in the list of versions.
 func IsRequestAPIAndUnknownVersion(req *http.Request, versions map[api.Version]struct{}) bool {
+
+	// "/"でパースする。「/api/4.0/hogehoge」のような形式のURLがパースされる
 	pathParts := strings.Split(req.URL.Path, "/")
 	if len(pathParts) < 2 {
 		return false // path doesn't start with `/api`, so it's not an api request
 	}
+
+	// 1つ目は「api」でなければエラー
 	if strings.ToLower(pathParts[1]) != "api" {
 		return false // path doesn't start with `/api`, so it's not an api request
 	}
+
+	// 3つの"/"でセパレートすると「/api/4.0/hogehoge」は 「api  4.0  hogehoge」のように分割される必要がある。このため、3つ以下ならエラー
 	if len(pathParts) < 3 {
 		return true // path starts with `/api` but not `/api/{version}`, so it's an api request, and an unknown/nonexistent version.
 	}
 
+	// バージョンフィールド(2番目)を渡してバージョン構造体に変換する
 	version, err := stringVersionToApiVersion(pathParts[2])
-	if err != nil {
+	if err != nil { // パースできなかったので不明バージョン
 		return true // path starts with `/api`, and version isn't a number, so it's an unknown/nonexistent version
 	}
+
+	// 指定されたバージョンが存在する場合
 	if _, versionExists := versions[version]; versionExists {
 		return false // path starts with `/api` and version exists, so it's API but a known version
 	}
+
+	// パスは「/api」で始まりバージョンもパースできたが、存在しないバージョン
 	return true // path starts with `/api`, and version is unknown
 }
 
 func stringVersionToApiVersion(version string) (api.Version, error) {
+
+	// ドットでバージョンをsplitする
 	versionParts := strings.Split(version, ".")
+
+	// ドットでsplitして2つ以上のフィールドがなければエラー
 	if len(versionParts) < 2 {
 		return api.Version{}, errors.New("error parsing version " + version)
 	}
+
+	// メジャーバージョンの取得 (1つ目のフィールド)
 	major, err := strconv.ParseUint(versionParts[0], 10, 64)
 	if err != nil {
 		return api.Version{}, errors.New("error parsing version " + version)
 	}
+
+	// マイナーバージョンの取得 (2つ目のフィールド)
 	minor, err := strconv.ParseUint(versionParts[1], 10, 64)
 	if err != nil {
 		return api.Version{}, errors.New("error parsing version " + version)
 	}
+
+	// APIバージョンを構造体形式で応答する
 	return api.Version{Major: major, Minor: minor}, nil
 }
 
@@ -458,6 +506,8 @@ func RegisterRoutes(d ServerData) error {
 
 	compiledRoutes := CompileRoutes(routes)
 	getReqID := nextReqIDGetter()
+
+	// HTTPサーバにAPiエンドポイントの登録を行う
 	d.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		Handler(compiledRoutes, versions, catchall, d.DB, &d.Config, getReqID, d.Plugins, d.TrafficVault, w, r)
 	})

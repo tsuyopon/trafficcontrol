@@ -101,6 +101,7 @@ const NoAuth = false
 
 func handlerToFunc(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// routing/routes.goのServeHTTPを呼び出す
 		handler.ServeHTTP(w, r)
 	}
 }
@@ -116,6 +117,8 @@ func GetRouteIDMap(IDs []int) map[int]struct{} {
 
 // Routes returns the API routes, raw non-API root level routes, and a catchall route for when no route matches.
 func Routes(d ServerData) ([]Route, http.Handler, error) {
+
+	// エンドポイントがマッチしなかったらなんでも受け付けるハンドラになる。 see: https://blog.sarabande.jp/post/90728554658
 	proxyHandler := rootHandler(d)
 
 	routes := []Route{
@@ -130,6 +133,8 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 		/**
 		 * 4.x API
 		 */
+
+		 // 構造体の最後に指定してあるのが、IDでdisabled_routesなどで無効なエンドポイントとして指定することができる値です。
 
 		// CDNI integration
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodGet, Path: `OC/FCI/advertisement/?$`, Handler: cdni.GetCapabilities, RequiredPrivLevel: auth.PrivLevelReadOnly, RequiredPermissions: []string{"CDNI-CAPACITY:READ"}, Authenticated: Authenticated, Middlewares: nil, ID: 541357729077},
@@ -1007,9 +1012,15 @@ type ThrottledHandler struct {
 }
 
 func (m ThrottledHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	// URLのパスを"/"でsplitする
 	pathParts := strings.Split(r.URL.Path, "/")
+
+	// 上記のsplitした結果で3つ以上のフィールドがあれば2つ目をバージョンフィールドとして取得
 	if len(pathParts) >= 3 {
 		version, err := strconv.ParseFloat(pathParts[2], 64)
+
+		// TODO: これは一体何の分岐か?
 		if err == nil && version >= 2 { // do not default to Perl for versions over 2.x
 			api.WriteRespAlertNotFound(w, r)
 			return

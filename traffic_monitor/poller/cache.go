@@ -58,6 +58,7 @@ type CachePollerConfig struct {
 
 // NewCache creates and returns a new CachePoller.
 // If tick is false, CachePoller.TickChan() will return nil.
+// CachePollerオブジェクトを返却する
 func NewCache(
 	tick bool,
 	handler handler.Handler,
@@ -66,6 +67,8 @@ func NewCache(
 ) CachePoller {
 
 	var tickChan chan uint64
+
+	// 引数がtrueならばtickChanチャネルを生成する
 	if tick {
 		tickChan = make(chan uint64)
 	}
@@ -113,6 +116,9 @@ func (p CachePoller) Poll() {
 			kill := make(chan struct{})
 			killChans[info.ID] = kill
 
+			// pollersはこのファイルでどこでも宣言されていません。pollers自体はpoller_types.goのソースコードで宣言されています。
+			// これはなぜ参照できるかというと同一パッケージ内であれば(先頭に宣言された「package poller」)、異なるファイルでも非公開関数や変数を参照できるらしい。
+			// see: https://ryochack.hatenadiary.org/entry/20120115/1326567659
 			if _, ok := pollers[info.PollType]; !ok {
 				if info.PollType != "" { // don't warn for missing parameters
 					log.Warnln("CachePoller.Poll: poll type '" + info.PollType + "' not found, using default poll type '" + DefaultPollerType + "'")
@@ -132,7 +138,8 @@ func (p CachePoller) Poll() {
 				pollerCtx = pollerObj.Init(pollerCfg, p.GlobalContexts[info.PollType])
 			}
 
-			go poller(info.Interval, info.ID, info.PollingProtocol, info.URL, info.URLv6, info.Host, info.Format, p.Handler, pollerObj.Poll, pollerCtx, kill)
+			// ここにp.Handlerで実行するハンドラが渡されている。peer/peer.goのHandle()などはここで引き渡される
+			go poller(info.Interval, info.ID, info.PollingProtocol, info.URL, info.URLv6, info.Host, info.Format, p.Handler /* ハンドラ */, pollerObj.Poll, pollerCtx, kill /* dieチャネル */)
 
 		}
 		p.Config = newConfig
@@ -154,17 +161,23 @@ func poller(
 	pollCtx interface{},
 	die <-chan struct{},
 ) {
+
 	pollSpread := time.Duration(rand.Float64()*float64(interval/time.Nanosecond)) * time.Nanosecond
 	time.Sleep(pollSpread)
 	tick := time.NewTicker(interval)
 	lastTime := time.Now()
 	oscillateProtocols := false
+
 	if pollingProtocol == config.Both {
 		oscillateProtocols = true
 	}
+
 	usingIPv4 := pollingProtocol != config.IPv6Only
+
 	for {
 		select {
+
+		// タイマーによる実行となる場合
 		case <-tick.C:
 
 			// /_atstatエンドポイントへのリクエストが行われる。
@@ -177,16 +190,20 @@ func poller(
 			if realInterval > interval+(time.Millisecond*100) {
 				log.Debugf("Intended Duration: %v Actual Duration: %v\n", interval, realInterval)
 			}
+
 			lastTime = time.Now()
 
 			pollID := atomic.AddUint64(&pollNum, 1)
 			pollFinishedChan := make(chan uint64)
 			log.Debugf("poll %v %v start\n", pollID, time.Now())
+
+			// ポーリングURL
 			pollUrl := url
 			if !usingIPv4 {
 				pollUrl = url6
 			}
 
+			// ポーリング用の関数が呼ばれる
 			bts, reqEnd, reqTime, err := pollFunc(pollCtx, pollUrl, host, pollID)
 			rdr := io.Reader(nil)
 			if bts != nil {
@@ -194,18 +211,24 @@ func poller(
 			}
 
 			log.Debugf("poll %v %v poller end\n", pollID, time.Now())
+
+			// Handleはここで実行される(traffic_monitor/cache/cache.goやtraffic_monitor/peer/peer.goで定義される)。定義位置と乖離しているのでわかりにくいので注意すること
 			go handler.Handle(id, rdr, format, reqTime, reqEnd, err, pollID, usingIPv4, pollCtx, pollFinishedChan)
 
 			if oscillateProtocols {
 				usingIPv4 = !usingIPv4
 			}
 
-			<-pollFinishedChan  // 有効コードで4行上にあるgo handler.Handleの最後の引数に指定したchannelで処理が終わると、チャネルが送信されるので、ここの受信のwaitが解除される。
+			<-pollFinishedChan  // 有効コードで4行上にあるgo handler.Handleの最後の引数に指定したchannelで処理が終わると、チャネルが送信されるので、ここの受信のwaitが解除される。(タイマー起動による同一処理の重複実行させないための対策だと思われる)
+
+		// dieを受け取った場合
+		// Pollingが不要になったら送付されてきます。これはPoll()内でdeletionsがあれば「go func() { killChan <- struct{}{} }()」で実行されることで送信されます。
 		case <-die:
 			tick.Stop()  // Poll()の「go func() { killChan <- struct{}{} }()」はここを実行させるためのもの
 			return
 		}
 	}
+
 }
 
 // 新・旧の設定オブジェクトを比較して、新に旧のURLがなければdeletionsにappendする。逆に旧に新のURLがなければadditionsにappendする。
