@@ -78,8 +78,8 @@ func main() {
 	//   ./traffic_monitor/conf/traffic_monitor.cfg
 	//   ./infrastructure/cdn-in-a-box/traffic_monitor/traffic_monitor.cfg
 	//
-	opsConfigFile := flag.String("opsCfg", "", "The traffic ops config file")
-	configFileName := flag.String("config", "", "The Traffic Monitor config file path")
+	opsConfigFile := flag.String("opsCfg", "", "The traffic ops config file")            // --opsCfgオプション
+	configFileName := flag.String("config", "", "The Traffic Monitor config file path")  // --configオプション
 	flag.Parse()
 
 	// --opsCfgが指定されていなければエラー
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// TODO add hot reloading (like opsConfigFile)?
-	// --configが指定されていない場合には下記のLoadでエラーになる
+	// --configが指定されていない場合にはデフォルト設定が有効になるようになっている
 	cfg, err := config.Load(*configFileName)
 	if err != nil {
 		fmt.Printf("Error starting service: failed to load config: %v\n", err)
@@ -113,11 +113,12 @@ func main() {
 		staticData.Hostname = cfg.ShortHostnameOverride
 	}
 
-	// TBD: 時刻によるランダム値らしいが、特に待っているわけでもないので何がしたいのか不明  ref: https://github.com/apache/trafficcontrol/pull/6527/files
+	// Go 1.20未満ではGoでrandを使う場合には忘れずにSeedを設定しなければならなかったとのこと。おそらくその名残ではないかと考えられる。
+	// cf. https://makiuchi-d.github.io/2017/09/09/qiita-9c4af327bc8502cdcdce.ja.html
 	rand.Seed(time.Now().UnixNano())
 	log.Infof("Starting with config %+v\n", cfg)
 
-	// 下記がメイン処理
+	// traffic_monitorのメイン処理
 	err = manager.Start(*opsConfigFile, cfg, staticData, *configFileName)
 	if err != nil {
 		fmt.Printf("Error starting service: failed to start managers: %v\n", err)

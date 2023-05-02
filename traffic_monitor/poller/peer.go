@@ -87,19 +87,32 @@ type PeerPollInfo struct {
 	PeerPollConfig
 }
 
+// peerPollerやdistributedPeerPollerからそれぞれ呼ばれる可能性がある
 func (p PeerPoller) Poll() {
+
 	killChans := map[string]chan<- struct{}{}
 
+	// ConfigChannelを受信したら実行する。
 	for newConfig := range p.ConfigChannel {
+
+		// 設定差分を確認して、削除したいポーリングがあればdeletionsに、追加したいポーリングがあればadditionsに情報が含まれる
 		deletions, additions := diffPeerConfigs(p.Config, newConfig)
 
+		// killChanに送信することにより対象のポーリングを停止し、チャネルを削除する
 		for _, id := range deletions {
+
+			// 削除したいPoll Idを指定して、killChanチャネルに送信する
 			killChan := killChans[id]
 			go func() { killChan <- struct{}{} }() // go - we don't want to wait for old polls to die.
+
+			// チャネルの削除
 			delete(killChans, id)
 		}
 
+		// 新しいポーリング対象がある場合には実行される
 		for _, info := range additions {
+
+			// killChanを用意しておく
 			kill := make(chan struct{})
 			killChans[info.ID] = kill
 
@@ -107,21 +120,30 @@ func (p PeerPoller) Poll() {
 				if info.PollType != "" { // don't warn for missing parameters
 					log.Warnln("CachePoller.Poll: poll type '" + info.PollType + "' not found, using default poll type '" + DefaultPollerType + "'")
 				}
-				info.PollType = DefaultPollerType
+				info.PollType = DefaultPollerType  // デフォルトは「http」
 			}
 			pollerObj := pollers[info.PollType]
 
+			// ポーリング用の設定オブジェクト
 			pollerCfg := PollerConfig{
 				Timeout:     info.Timeout,
 				NoKeepAlive: info.NoKeepAlive,
 				PollerID:    info.ID,
 			}
+
 			pollerCtx := interface{}(nil)
+			// 下記は info.PollType = http の場合にだけ条件分岐に突入する
 			if pollerObj.Init != nil {
+				// 下記Init()はpoller/poller_type_http.goのhttpInit()が呼ばれます。
 				pollerCtx = pollerObj.Init(pollerCfg, p.GlobalContexts[info.PollType])
 			}
+
+			// HTTPポーリング処理や結果の解析処理は下記で行います。
 			go peerPoller(info.Interval, info.ID, info.URLs, info.Format, p.Handler, pollerObj.Poll, pollerCtx, kill)
+
 		}
+
+		// 設定オブジェクトを差し替える
 		p.Config = newConfig
 	}
 }
@@ -145,10 +167,13 @@ func peerPoller(
 		select {
 		case <-tick.C:
 
+			// 現在時刻から最終更新時刻(lastTime)の差分を取得してrealIntervalとして、指定したIntervalが経過していたらログを出力する
 			realInterval := time.Now().Sub(lastTime)
 			if realInterval > interval+(time.Millisecond*100) {
 				log.Debugf("Intended Duration: %v Actual Duration: %v\n", interval, realInterval)
 			}
+
+			// タイマーによる最終実行時刻をlastTimeに保存しておく
 			lastTime = time.Now()
 
 			pollID := atomic.AddUint64(&pollNum, 1)
@@ -162,18 +187,29 @@ func peerPoller(
 				// this should never happen because TM creates the URL
 				log.Errorf("parsing peer poller URL %s: %s", urlString, err.Error())
 			}
+
 			host := urlParsed.Host
+
+			// ここでポーリングが行われ、その結果が帰ってくる
+			// typeが「http」の場合httpPoll、「noop」の場合noopPollが呼ばれる (AddPollerTypeで指定した値)
 			bts, reqEnd, reqTime, err := pollFunc(pollCtx, urlString, host, pollID)
+
+			// ポーリングにより取得した結果を読み込む
 			rdr := io.Reader(nil)
 			if bts != nil {
 				rdr = bytes.NewReader(bts) // TODO change handler to take bytes? Benchmark?
 			}
 
 			log.Debugf("peer poll %v %v poller end\n", pollID, time.Now())
+
+			// Handleはここで実行される(Handle関数自体はtraffic_monitor/cache/cache.goやtraffic_monitor/peer/peer.goで定義されている)。定義位置と実行位置が乖離しているのでわかりにくいので注意すること
+			// HandleはHTTPポーリングのレスポンスの解析処理が行われる
 			go handler.Handle(id, rdr, format, reqTime, reqEnd, err, pollID, false, pollCtx, pollFinishedChan)
 
+			// peerの場合にはStartPeerManager()内のgoroutineから、distributedPeerの場合にはStartDistributedPeerManager()に内のgoroutineから送信されます
 			<-pollFinishedChan
-		case <-die:
+
+		case <-die: // killChanを受け取った場合には、タイマーを停止してこの関数をそのままreturnする。
 			tick.Stop()
 			return
 		}
@@ -182,13 +218,20 @@ func peerPoller(
 
 // diffPeerConfigs takes the old and new configs, and returns a list of deleted IDs, and a list of new polls to do
 func diffPeerConfigs(old PeerPollerConfig, new PeerPollerConfig) ([]string, []PeerPollInfo) {
+
 	deletions := []string{}
 	additions := []PeerPollInfo{}
 
+	// Intervalが変わっている または NoKeepAlive設定が変わっている 場合には
+	// 古いデータは全て削除対象とする。新しいデータは全てオブジェクト生成対象とする
 	if old.Interval != new.Interval || old.NoKeepAlive != new.NoKeepAlive {
+
+		// 削除対象のURLが含まれるIDを取得する
 		for id, _ := range old.Urls {
 			deletions = append(deletions, id)
 		}
+
+		// 追加対象のURLが含まれるIDを含んだPeerPollInfoオブジェクトを生成する
 		for id, pollCfg := range new.Urls {
 			additions = append(additions, PeerPollInfo{
 				Interval:       new.Interval,
@@ -197,9 +240,15 @@ func diffPeerConfigs(old PeerPollerConfig, new PeerPollerConfig) ([]string, []Pe
 				PeerPollConfig: pollCfg,
 			})
 		}
+
+		// returnすることに注意
 		return deletions, additions
+
 	}
 
+
+	// 古いURLに含まれるIDが、新しいURLに含まれるIDに存在するかどうかをチェックする
+	// 存在しなければdeletionsに追加、存在していればdeletionsに追加し、新しいオブジェクトを生成する
 	for id, oldPollCfg := range old.Urls {
 		newPollCfg, newIdExists := new.Urls[id]
 		if !newIdExists {
@@ -215,6 +264,8 @@ func diffPeerConfigs(old PeerPollerConfig, new PeerPollerConfig) ([]string, []Pe
 		}
 	}
 
+	// 新しいURLに含まれるIDが、古いURLに含まれるIDに存在するかどうかをチェックする
+	// 存在しなければ新規で追加されるIDだということでadditionに追加する。
 	for id, newPollCfg := range new.Urls {
 		_, oldIdExists := old.Urls[id]
 		if !oldIdExists {

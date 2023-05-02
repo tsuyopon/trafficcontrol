@@ -101,6 +101,7 @@ func healthResultManagerListen(
 	}
 
 	lastHealthEndTimes := map[tc.CacheName]time.Time{}
+
 	// This reads at least 1 value from the cacheHealthChan. Then, we loop, and try to read from the channel some more. If there's nothing to read, we hit `default` and process. If there is stuff to read, we read it, then inner-loop trying to read more. If we're continuously reading and the channel is never empty, and we hit the tick time, process anyway even though the channel isn't empty, to prevent never processing (starvation).
 	var ticker *time.Ticker
 
@@ -130,13 +131,20 @@ func healthResultManagerListen(
 
 	for {
 		var results []cache.Result
-		results = append(results, <-cacheHealthChan)
+
+		// cacheHealthChanを受信するまでappendがブロックされます
+		// 1回目のループでresultsスライスに1つの結果を追加し、ticker変数に新しいtime.Tickerを設定します。
+		results = append(results, <-cacheHealthChan) // 実際にはresultChanを受信しています。
 		if ticker != nil {
 			ticker.Stop()
 		}
 		ticker = time.NewTicker(cfg.HealthFlushInterval)
 	innerLoop:
 		for {
+			// 2回目のループでは、ticker.Cチャネルがトリガーされた場合にprocess関数を呼び出し、
+			// resultsスライスを空にする前に結果を処理します。
+			// 2番目のselectブロックは、cacheHealthChanからの追加の結果がある場合に、resultsスライスに結果を追加し、
+			// defaultブロックはticker.Cがトリガーされなかった場合にprocess関数を呼び出し、ループから抜け出します。
 			select {
 			case <-ticker.C:
 				log.Infof("Health Result Manager flushing queued results\n")
@@ -144,7 +152,7 @@ func healthResultManagerListen(
 				break innerLoop
 			default:
 				select {
-				case r := <-cacheHealthChan:
+				case r := <-cacheHealthChan: // 追加受信があれば
 					results = append(results, r)
 				default:
 					process(results)
@@ -172,9 +180,11 @@ func processHealthResult(
 	cfg config.Config,
 	combineStates func(),
 ) {
+
 	if len(results) == 0 {
 		return
 	}
+
 	defer func() {
 		for _, r := range results {
 			log.Debugf("poll %v %v finish\n", r.PollID, time.Now())
@@ -195,6 +205,8 @@ func processHealthResult(
 
 	monitorConfigCopy := monitorConfig.Get()
 	healthHistoryCopy := healthHistory.Get().Copy()
+
+	// 
 	for i, healthResult := range results {
 		fetchCount.Inc()
 		var prevResult cache.Result

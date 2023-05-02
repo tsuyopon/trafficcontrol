@@ -207,6 +207,7 @@ type TrafficOpsSessionThreadsafe struct {
 // NewTrafficOpsSessionThreadsafe returns a new threadsafe
 // TrafficOpsSessionThreadsafe wrapping the given `Session`.
 func NewTrafficOpsSessionThreadsafe(s *client.Session, ls *legacyClient.Session, histLimit uint64, cfg config.Config) TrafficOpsSessionThreadsafe {
+
 	return TrafficOpsSessionThreadsafe{
 		CRConfigBackupFile: cfg.CRConfigBackupFile,
 		crConfigHist:       NewCRConfigHistoryThreadsafe(histLimit),
@@ -216,6 +217,7 @@ func NewTrafficOpsSessionThreadsafe(s *client.Session, ls *legacyClient.Session,
 		legacySession:      &ls,
 		TMConfigBackupFile: cfg.TMConfigBackupFile,
 	}
+
 }
 
 // Initialized tells whether or not the TrafficOpsSessionThreadsafe has been
@@ -485,8 +487,13 @@ func (s TrafficOpsSessionThreadsafe) CRConfigRaw(cdn string) ([]byte, error) {
 // CRConfigRaw has never been called successfully, this calls CRConfigRaw once
 // to try to get the CRConfig from Traffic Ops.
 func (s TrafficOpsSessionThreadsafe) LastCRConfig(cdn string) ([]byte, time.Time, error) {
+
+	// メモリ上から取得しようとする (func (c ByteMapCache) Get(key string) から取り出す)
 	crConfig, crConfigTime, _ := s.lastCRConfig.Get(cdn)
+
+	// 取得できなかった場合には、過去に成功したことがないと見ないしてTrafficOps APIにアクセスする
 	if len(crConfig) == 0 {
+		// TrafficOps APIに下記でアクセスする
 		b, err := s.CRConfigRaw(cdn)
 		return b, time.Now(), err
 	}

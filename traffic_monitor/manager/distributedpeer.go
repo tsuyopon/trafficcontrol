@@ -52,6 +52,7 @@ func StartDistributedPeerManager(
 				unpolledCaches.SetRemotePolled(distributedPeerResult.PeerStates.Caches)
 			}
 
+			// peer.Result構造体中のPollFinishedチャネルに送信する
 			distributedPeerResult.PollFinished <- distributedPeerResult.PollID
 		}
 	}()

@@ -99,6 +99,9 @@ func (p CachePoller) Poll() {
 	// killChans配列ですが、range addtionsの中でこの配列にチャネルを新規登録し、その後の処理でgo pollerに引き渡して、キャンセル用チャネルとして利用されます。
 	// なお、range deletionsの中ではdiffConfigsでdeletionsと判定された特定のidからkillChans配列から取得してkillChanに格納して、キャンセル用として送信しています。
 	killChans := map[string]chan<- struct{}{}
+
+	// StartMonitorConfigManager()経由でp.ConfigChannelにチャネルに設定情報データが送信されてきたら下記のfor文が実行される
+	// つまり、定期的な設定情報を受信したら、ポーリングの追加・削除処理をここで行う。
 	for newConfig := range p.ConfigChannel {
 
 		// 古い設定と新しい設定を比較します。なくなった設定はdeletionsに、新しく追加した設定はadditionsに追加されます。。
@@ -107,6 +110,8 @@ func (p CachePoller) Poll() {
 		// deletionsへの処理
 		for _, id := range deletions {
 			killChan := killChans[id]
+			
+			// このkillChanに送付することでpoller()のdie変数がチャネル受信することになります。
 			go func() { killChan <- struct{}{} }() // go - we don't want to wait for old polls to die.
 			delete(killChans, id)
 		}
@@ -123,8 +128,12 @@ func (p CachePoller) Poll() {
 				if info.PollType != "" { // don't warn for missing parameters
 					log.Warnln("CachePoller.Poll: poll type '" + info.PollType + "' not found, using default poll type '" + DefaultPollerType + "'")
 				}
+
+				// DefaultPollerTypeは「http」タイプとなる
 				info.PollType = DefaultPollerType
 			}
+
+			// オブジェクトを取得する
 			pollerObj := pollers[info.PollType]
 
 			pollerCfg := PollerConfig{
@@ -134,7 +143,10 @@ func (p CachePoller) Poll() {
 			}
 
 			pollerCtx := interface{}(nil)
+
+			// 下記は info.PollType = http の場合にだけ条件分岐に突入する
 			if pollerObj.Init != nil {
+				// 下記Init()はpoller/poller_type_http.goのhttpInit()が呼ばれます。
 				pollerCtx = pollerObj.Init(pollerCfg, p.GlobalContexts[info.PollType])
 			}
 
@@ -142,6 +154,7 @@ func (p CachePoller) Poll() {
 			go poller(info.Interval, info.ID, info.PollingProtocol, info.URL, info.URLv6, info.Host, info.Format, p.Handler /* ハンドラ */, pollerObj.Poll, pollerCtx, kill /* dieチャネル */)
 
 		}
+
 		p.Config = newConfig
 	}
 }
@@ -186,33 +199,39 @@ func poller(
 				continue
 			}
 
+			// time.Now()関数を使って現在の時刻を取得して、前回タイマー起動時(lastTime)からの経過時間をrealIntervalに格納している
 			realInterval := time.Now().Sub(lastTime)
+
+			// realIntervalが指定したintervalを超過した場合にはログを出力する
 			if realInterval > interval+(time.Millisecond*100) {
 				log.Debugf("Intended Duration: %v Actual Duration: %v\n", interval, realInterval)
 			}
 
+			// タイマー起動時刻として現在時刻を保存して、次回の計算でこの値を利用するために保持しておく
 			lastTime = time.Now()
 
 			pollID := atomic.AddUint64(&pollNum, 1)
 			pollFinishedChan := make(chan uint64)
 			log.Debugf("poll %v %v start\n", pollID, time.Now())
 
-			// ポーリングURL
+			// ポーリングURLをセットする。usingIPv4=falseならIPv6用のURLをpollUrlとしてセットする
 			pollUrl := url
 			if !usingIPv4 {
 				pollUrl = url6
 			}
 
 			// ポーリング用の関数が呼ばれる
+			// typeが「http」の場合httpPoll、「noop」の場合noopPollが呼ばれる (AddPollerTypeで指定した値。
 			bts, reqEnd, reqTime, err := pollFunc(pollCtx, pollUrl, host, pollID)
 			rdr := io.Reader(nil)
 			if bts != nil {
 				rdr = bytes.NewReader(bts) // TODO change handler to take bytes? Benchmark?
 			}
 
+			// デバッグログへの出力
 			log.Debugf("poll %v %v poller end\n", pollID, time.Now())
 
-			// Handleはここで実行される(traffic_monitor/cache/cache.goやtraffic_monitor/peer/peer.goで定義される)。定義位置と乖離しているのでわかりにくいので注意すること
+			// Handleはここで実行される(Handle関数自体はtraffic_monitor/cache/cache.goやtraffic_monitor/peer/peer.goで定義されている)。定義位置と実行位置が乖離しているのでわかりにくいので注意すること
 			go handler.Handle(id, rdr, format, reqTime, reqEnd, err, pollID, usingIPv4, pollCtx, pollFinishedChan)
 
 			if oscillateProtocols {
@@ -222,7 +241,7 @@ func poller(
 			<-pollFinishedChan  // 有効コードで4行上にあるgo handler.Handleの最後の引数に指定したchannelで処理が終わると、チャネルが送信されるので、ここの受信のwaitが解除される。(タイマー起動による同一処理の重複実行させないための対策だと思われる)
 
 		// dieを受け取った場合
-		// Pollingが不要になったら送付されてきます。これはPoll()内でdeletionsがあれば「go func() { killChan <- struct{}{} }()」で実行されることで送信されます。
+		// Pollingが不要になったら送付されてきます。これはこのファイル(cache.go)のPoll()内でdeletionsがあれば「go func() { killChan <- struct{}{} }()」で実行されることで送信されます。これにより不要なポーリングを破棄させる役割があります
 		case <-die:
 			tick.Stop()  // Poll()の「go func() { killChan <- struct{}{} }()」はここを実行させるためのもの
 			return

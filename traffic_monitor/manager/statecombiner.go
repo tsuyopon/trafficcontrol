@@ -33,10 +33,12 @@ import (
 
 // StartStateCombiner starts the State Combiner goroutine, and returns the threadsafe CombinedStates, and a func to signal to combine states.
 func StartStateCombiner(events health.ThreadsafeEvents, peerStates peer.CRStatesPeersThreadsafe, localStates peer.CRStatesThreadsafe, toData todata.TODataThreadsafe) (peer.CRStatesThreadsafe, func()) {
+
 	combinedStates := peer.NewCRStatesThreadsafe()
 
 	// the chan buffer just reduces the number of goroutines on our infinite buffer hack in combineState(), no real writer will block, since combineState() writes in a goroutine.
 	combineStateChan := make(chan struct{}, 1)
+
 	// 以下の無名関数は下記の処理を行います。
 	// 1. combineStateChanチャンネルに空の構造体(struct{}{})を送付します。
 	// 2. defaultの部分についてはcombineStateChanが満杯になった際にこちらの遷移に入ります。
@@ -49,12 +51,14 @@ func StartStateCombiner(events health.ThreadsafeEvents, peerStates peer.CRStates
 
 	go func() {
 		overrideMap := map[tc.CacheName]bool{}
+
 		// combineStateに格納されている無名関数中でcombineStateChanに値が追加されると、このfor range中のcombineCrStatesが実行されます。
 		// それまではまるで無限ループのように待機します。
 		// なおcombineStateChanチャネルがcloseされた場合には、for rangeのループ処理が閉じられることになります。
 		for range combineStateChan {
 			combineCrStates(events, true, peerStates.GetCRStatesPeersInfo(), localStates.Get(), combinedStates, overrideMap, toData.Get())
 		}
+
 	}()
 
 	return combinedStates, combineState

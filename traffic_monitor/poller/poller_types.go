@@ -58,15 +58,26 @@ type PollerFunc func(ctx interface{}, url string, host string, pollID uint64) ([
 
 // AddPollerType adds a poller with the given name, and the given init and poll funcs. The globalInit and init funcs may be nil; poller MUST NOT be nil.
 func AddPollerType(name string, globalInit PollerGlobalInitFunc, init PollerInitFunc, poller PollerFunc) {
+
+	// 
+	// (補足) poller_type_http.goとpoller_type_noop.goのAddPollerTypeへの指定の違い
+	// poller_type_http.goの場合: AddPollerType(PollerTypeHTTP, httpGlobalInit, httpInit, httpPoll)
+	// poller_type_noop.goの場合: AddPollerType(PollerTypeNOOP, nil, nil, noopPoll)
+	//
 	pollers[name] = PollerType{GlobalInit: globalInit, Init: init, Poll: poller}
 }
 
 // GetGlobalContexts returns the global contexts corresponding to the registered pollers
 func GetGlobalContexts(cfg config.Config, appData config.StaticAppData) map[string]interface{} {
+
 	ctxs := map[string]interface{}{}
+
+	// poller/poller_type_http.goやpoller/poller_type_noop.go にてinitがパッケージインポート時に実行されているので、pollersにはinit時にAddPollerType()が実行されるので値が格納されています
 	for pollerName, poller := range pollers {
+
+		// GlobalInitはpoller_type_http.goの場合に呼ばれる。
 		if poller.GlobalInit != nil {
-			ctxs[pollerName] = poller.GlobalInit(cfg, appData)
+			ctxs[pollerName] = poller.GlobalInit(cfg, appData)  // poller_type_http.goの場合はGlobalInitはhttpGlobalInitが呼ばれている
 		}
 	}
 	return ctxs

@@ -25,6 +25,8 @@ import (
 
 const PollerTypeNOOP = "noop"
 
+// golangではinit関数はパッケージインポート時に明示的に実行を指定しなくても実行されます。つまり、下記のinitは読み込み時に実行されます。
+// 注意点として、同じパッケージ内に複数のinit()関数がある場合、実行の順序が保証されません。また、同じパッケージを複数回インポートしても、init()関数は1回しか実行されません。
 func init() {
 	AddPollerType(PollerTypeNOOP, nil, nil, noopPoll)
 }

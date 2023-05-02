@@ -69,6 +69,7 @@ func StartStatHistoryManager(
 	events health.ThreadsafeEvents,
 	combineState func(),
 ) (threadsafe.ResultInfoHistory, threadsafe.ResultStatHistory, threadsafe.CacheKbpses, threadsafe.DurationMap, threadsafe.LastStats, threadsafe.DSStatsReader, threadsafe.UnpolledCaches, threadsafe.CacheAvailableStatus) {
+
 	statInfoHistory := threadsafe.NewResultInfoHistory()
 	statResultHistory := threadsafe.NewResultStatHistory()
 	statMaxKbpses := threadsafe.NewCacheKbpses()

@@ -44,6 +44,7 @@ import (
 // Start starts the poller and handler goroutines
 //
 func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData, trafficMonitorConfigFileName string) error {
+
 	toSession := towrap.NewTrafficOpsSessionThreadsafe(nil, nil, cfg.CRConfigHistoryCount, cfg)
 
 	localStates := peer.NewCRStatesThreadsafe() // this is the local state as discoverer by this traffic_monitor
@@ -85,13 +86,13 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 		go distributedPeerPoller.Poll()
 	}
 
-	events := health.NewThreadsafeEvents(cfg.MaxEvents)  // 設定値`max_events`の値を指定する
+	// 設定値`max_events`の値を指定する
+	events := health.NewThreadsafeEvents(cfg.MaxEvents)
 
 	// 「chan struct{}」は空のチャネルの定義です
 	var cachesChangedForStatMgr chan struct{}
 	var cachesChangedForHealthMgr chan struct{}
 	var cachesChanged chan struct{}
-
 
 	// 設定値`stat_polling=true`の場合
 	if cfg.StatPolling {
@@ -103,6 +104,7 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 		cachesChangedForHealthMgr = make(chan struct{})
 		cachesChanged = cachesChangedForHealthMgr
 	}
+
 	peerStates := peer.NewCRStatesPeersThreadsafe(cfg.PeerOptimisticQuorumMin) // each peer's last state is saved in this map
 	distributedPeerStates := peer.NewCRStatesPeersThreadsafe(0)
 
@@ -165,12 +167,14 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 		healthUnpolledCaches,
 	)
 
+	// 第４引数と第５引数のchanですが、「chan<-」は単方向チャネル型を表します。
+	// [] は、Go言語におけるスライス（slice）型を表します。したがって、[]chan<- testChannel は、testChannel型の値を送信することができるチャネル型のスライスを表します。
 	if _, err := StartOpsConfigManager(
 		opsConfigFile,
 		toSession,
 		toData,
-		[]chan<- handler.OpsConfig{monitorConfigPoller.OpsConfigChannel},
-		[]chan<- towrap.TrafficOpsSessionThreadsafe{monitorConfigPoller.SessionChannel},
+		[]chan<- handler.OpsConfig{monitorConfigPoller.OpsConfigChannel},                // handler.OpsConfig型のmonitorConfigPoller.OpsConfigChannelチャネルの受信を表す
+		[]chan<- towrap.TrafficOpsSessionThreadsafe{monitorConfigPoller.SessionChannel}, // towrap.TrafficOpsSessionThreadsafe型のmonitorConfigPoller.SessionChannelチャネルの受信を表す
 		localStates,
 		peerStates,
 		distributedPeerStates,
@@ -208,9 +212,12 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 
 // healthTickListener listens for health ticks, and writes to the health iteration variable. Does not return.
 func healthTickListener(cacheHealthTick <-chan uint64, healthIteration threadsafe.Uint) { // cacheHealthTickは受信専用チャネル
+
+	// TODO: どこからcacheHealthTickチャネルを受信するのか?
 	for i := range cacheHealthTick { // cacheHealthTickチャネルから新しい値が受信されるまで待機し、値が受信された場合は、healthIteration 変数にその値を設定します。
 		healthIteration.Set(i)
 	}
+
 }
 
 // filenameには--configで指定されたファイル名が入ります。
@@ -218,15 +225,18 @@ func startMonitorConfigFilePoller(filename string) error {
 
 	// 無名関数を代入するクロージャー変数
 	onChange := func(bytes []byte, err error) {
+
 		if err != nil {
 			log.Errorf("monitor config file poll, polling file '%v': %v", filename, err)
 			return
 		}
+
 		cfg, err := config.LoadBytes(bytes)
 		if err != nil {
 			log.Errorf("monitor config file poll, loading bytes '%v' from '%v': %v", string(bytes), filename, err)
 			return
 		}
+
 		if err := log.InitCfg(cfg); err != nil {
 			log.Errorf("monitor config file poll, getting log writers '%v': %v", filename, err)
 			return

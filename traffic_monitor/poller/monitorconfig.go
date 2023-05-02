@@ -50,6 +50,7 @@ func NewMonitorConfig(interval time.Duration) MonitorConfigPoller {
 		Interval:       interval,
 		SessionChannel: make(chan towrap.TrafficOpsSessionThreadsafe),
 		// ConfigChannel MUST have a buffer size 1, to make the nonblocking writeConfig work
+		// ConfigChannelはチャネル数が1
 		ConfigChannel:    make(chan MonitorCfg, 1),
 		OpsConfigChannel: make(chan handler.OpsConfig),
 		IntervalChan:     make(chan time.Duration),
@@ -93,7 +94,7 @@ func (p MonitorConfigPoller) Poll() {
 
 		case opsConfig := <-p.OpsConfigChannel:
 			log.Infof("MonitorConfigPoller: received new opsConfig: %v\n", opsConfig)
-			p.OpsConfig = opsConfig   // 受け取った設定値をp.OpsConfigに書き込んでおき、終了する。(おそらく、タイマー起因でこの値がその後使われる)
+			p.OpsConfig = opsConfig   // 受け取った設定値をp.OpsConfigに書き込む
 
 		case session := <-p.SessionChannel:
 			log.Infof("MonitorConfigPoller: received new session: %v\n", session)
