@@ -350,19 +350,24 @@ func LoadBackendConfig(backendConfigPath string) (BackendConfig, error) {
 	return cfg, nil
 }
 
+// cdn.confを読み込み、go言語の構造体に変換する(SMTPの設定有無についても処理を考慮する)
 func LoadCdnConfig(cdnConfPath string) (Config, error) {
+
 	// load json from cdn.conf
+	// cdn.confをロードする
 	confBytes, err := ioutil.ReadFile(cdnConfPath)
 	if err != nil {
 		return Config{}, fmt.Errorf("reading CDN conf '%s': %v", cdnConfPath, err)
 	}
 
+	// jsonをgo言語の構造体に変換する
 	cfg := Config{}
 	err = json.Unmarshal(confBytes, &cfg)
 	if err != nil {
 		return Config{}, fmt.Errorf("unmarshalling '%s': %v", cdnConfPath, err)
 	}
 
+	// SMTP設定がnilの場合には、空のConfigSMTP構造体をセットする
 	if cfg.SMTP == nil {
 		cfg.SMTP = &ConfigSMTP{}
 	}

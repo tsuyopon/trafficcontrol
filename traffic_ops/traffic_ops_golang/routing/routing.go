@@ -128,40 +128,74 @@ type CompiledRoute struct {
 	ID      int
 }
 
+// エンドポイント一覧からAPIのメジャーバージョンとマイナーバージョンを調布君子で取得して、
+// 下記のルールでソートした、api.Versionの配列を応答します。
+//
+// ソート時は1 -> 2の順で優先度が高いものとする
+//  1. メジャーバージョンを昇順でソートする
+//  2. マイナーバージョンを昇順でソートする
+//
 func getSortedRouteVersions(rs []Route) []api.Version {
+
 	majorsToMinors := map[uint64][]uint64{}
 	majors := map[uint64]struct{}{}
+
+	// Route構造体に登録されたエンドポイント(routes.goのRoute()にて定義)毎に処理が行われます。
 	for _, r := range rs {
 		majors[r.Version.Major] = struct{}{}
+
+		// majorsToMinorsマップがすでにメジャーバージョンに対応するスライスを持っている場合、以前に追加されたかどうかを確認するために、すでに含まれているかどうかを判定します。
 		if _, ok := majorsToMinors[r.Version.Major]; ok {
+			// majorsToMinorsマップがすでにメジャーバージョンに対応するスライスを持っている場合の処理
+
 			previouslyIncluded := false
+
+			// majorsToMinorsマップがすでにメジャーバージョンに対応するスライスを持っている場合、以前に追加されたかどうかを確認するために、すでに含まれているかどうかを判定します。
 			for _, prevMinor := range majorsToMinors[r.Version.Major] {
+				// メジャーバージョンに対応するマイナーバージョンでrangeループしていて、majorsToMinors[r.Version.Major][マイナーバージョン]に登録済みかを確認します。
 				if prevMinor == r.Version.Minor {
 					previouslyIncluded = true
 				}
 			}
+
+			// 以前にそのメジャーバージョンにマイナーバージョンが追加されたことがない場合、
+			// majorsToMinorsマップに、メジャーバージョンに対応するスライスに新しいマイナーバージョンを追加します。
 			if !previouslyIncluded {
 				majorsToMinors[r.Version.Major] = append(majorsToMinors[r.Version.Major], r.Version.Minor)
 			}
+
 		} else {
+			// majorsToMinorsマップがすでにメジャーバージョンに対応するスライスを持っていない場合(以前追加されたことがない場合)、
+			// majorsToMinorsマップに、メジャーバージョンに対応するスライスに新しいマイナーバージョンを追加します。
 			majorsToMinors[r.Version.Major] = []uint64{r.Version.Minor}
 		}
 	}
 
+	// 取得したメジャーバージョンをsortedMajoursという配列に詰めます
 	sortedMajors := []uint64{}
 	for major := range majors {
 		sortedMajors = append(sortedMajors, major)
 	}
+
+	// 取得したメジャーバージョンの一覧を昇順にソートします。
 	sort.Slice(sortedMajors, func(i, j int) bool { return sortedMajors[i] < sortedMajors[j] })
 
 	versions := []api.Version{}
+
+	// メジャーバージョン毎に処理を行います
 	for _, major := range sortedMajors {
+		// 各メジャーバージョンに属するマイナーバージョンの一覧を取得し、昇順にソートして、各バージョンを作成し、ソートされたバージョンのスライスに追加します。
 		sort.Slice(majorsToMinors[major], func(i, j int) bool { return majorsToMinors[major][i] < majorsToMinors[major][j] })
 		for _, minor := range majorsToMinors[major] {
 			version := api.Version{Major: major, Minor: minor}
+
+			// つまり、下記には メジャーバージョンはメジャーバージョンの昇順、その後メジャーバージョンに属するマイナーバージョンの昇順で並び替えられます。
+			// 下記のような順番でappendされることになります。
+			// 例 api.Version{Major: 3, Minor: 1}, api.Version{Major: 3, Minor: 2}, api.Version{Major: 3, Minor: 3}, api.Version{Major: 4, Minor: 2}, api.Version{Major: 4, Minor: 3}, api.Version{Major: 3, Minor: 4}
 			versions = append(versions, version)
 		}
 	}
+
 	return versions
 }
 
@@ -212,6 +246,7 @@ func CreateRouteMap(rs []Route, disabledRouteIDs []int, perlHandler http.Handler
 
 		// バージョン毎のrange
 		for _, version := range versions[versionI:] {
+
 			if version.Major >= nextMajorVer {
 				break
 			}
@@ -235,32 +270,58 @@ func CreateRouteMap(rs []Route, disabledRouteIDs []int, perlHandler http.Handler
 	for _, version := range versions {
 		versionSet[version] = struct{}{}
 	}
+
 	return m, versionSet
 }
 
+
 // CompileRoutes - takes a map of methods to paths and handlers, and returns a map of methods to CompiledRoutes
+// この関数は、与えられたルート情報(例: 「OC/CI/configuration/request/{id}/{approved}」)を正規表現を使ってコンパイルされたルートに変換するために必要な事前準備としてのオブジェクトを生成しています。
 func CompileRoutes(routes map[string][]PathHandler) map[string][]CompiledRoute {
+
 	compiledRoutes := map[string][]CompiledRoute{}
+
+	// APIエンドポイント毎にループ処理を行う
+	// routesはindexにメソッド名(GET等)、keyにpathHandler構造体が含まれる
 	for method, mRoutes := range routes {
 		for _, pathHandler := range mRoutes {
+
+			// 「OC/CI/configuration/request/{id}/{approved}」のようなパス情報が含まれます。
 			route := pathHandler.Path
 			handler := pathHandler.Handler
 			var params []string
+
+			// "{"が見つかった１のindexから順番に処理をしていく
+			// 「OC/CI/configuration/request/{id}/{approved}」のようなAPIエンドポイントを表すstringsに対して処理をしていくことになります。
 			for open := strings.Index(route, "{"); open > 0; open = strings.Index(route, "{") {
+
+				// 閉じかっこ"}"が見つかったらcloseとする
 				close := strings.Index(route, "}")
+
+				// "}"が存在しなかったらcloseには-1が入ります。APIエンドポイントのrouteには必ず"{"が含まれる場合には"}"も対として含まれますが、このケースでは"}"がないので不正なルート設定としています。
 				if close < 0 {
 					panic("malformed route")
 				}
+
+				// "{"から"}"までを取得してparamに格納する。この時"{"と"}"は含まれない範囲指定となっている。
 				param := route[open+1 : close]
 
+				// "{"から"}"が複数あれば、
 				params = append(params, param)
+
+				// "{"から"}"で指定された箇所が後で置換できるように正規表現にしておきます。
 				route = route[:open] + `([^/]+)` + route[close+1:]
 			}
+
+			// Routeの正規表現を有効にする (手前のロジックで必ず"([^/]+)"を付与しているので正規表現となる。
 			regex := regexp.MustCompile(route)
 			id := pathHandler.ID
+
+			// compiledRoutesスライスに詰めます
 			compiledRoutes[method] = append(compiledRoutes[method], CompiledRoute{Handler: handler, Regex: regex, Params: params, ID: id})
 		}
 	}
+
 	return compiledRoutes
 }
 
@@ -493,7 +554,7 @@ func stringVersionToApiVersion(version string) (api.Version, error) {
 // TrafficOpsのAPIエンドポイント設定となる主要処理
 func RegisterRoutes(d ServerData) error {
 
-	// **重要** 下記のRoutesでAPIエンドポイントの登録が行われる
+	// **重要** 下記のRoutes(d)でAPIエンドポイントの登録が行われる重要な箇所です
 	// routing/routes.goが呼ばれてAPIのRoute情報がrouteSliveに保存される
 	routeSlice, catchall, err := Routes(d)
 	if err != nil {
@@ -502,15 +563,19 @@ func RegisterRoutes(d ServerData) error {
 	}
 
 	authBase := middleware.AuthBase{Secret: d.Config.Secrets[0], Override: nil} //we know d.Config.Secrets is a slice of at least one or start up would fail.
+
+	// エンドポイント毎にオブジェクトを作成する
+	// この際にdisableなエンドポイントかやどうかや、認証失敗時のハンドラ、リクエストタイムアウト時の時刻などをそれぞれ設定したオブジェクトを変換する
 	routes, versions := CreateRouteMap(routeSlice, d.DisabledRoutes, handlerToFunc(catchall), authBase, d.RequestTimeout)
 
 	compiledRoutes := CompileRoutes(routes)
 	getReqID := nextReqIDGetter()
 
-	// HTTPサーバにAPiエンドポイントの登録を行う
+	// HTTPサーバにAPIエンドポイントの登録を行う
 	d.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		Handler(compiledRoutes, versions, catchall, d.DB, &d.Config, getReqID, d.Plugins, d.TrafficVault, w, r)
 	})
+
 	return nil
 }
 

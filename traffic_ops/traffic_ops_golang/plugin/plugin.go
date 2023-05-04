@@ -38,10 +38,18 @@ func List() []string {
 	return l
 }
 
+// appCfg.Pluginsに設定された有効なプラグイン情報を取得する
 func Get(appCfg config.Config) Plugins {
 	log.Infof("plugin.Get given: %+v\n", appCfg.Plugins)
+
+	// appCfg.Pluginsに指定されたプラグインのうち、実際に有効なプラグインを取得する(ソートもされる)
+	// cdn.confに指定された「plugin」設定を追加した場合 (サンプルがなかった)
 	pluginSlice := getEnabled(appCfg.Plugins)
+	
+	// cdn.confに指定された「plugin_config」の設定が入る
+	// 設定例: {"plugin_config": {"hello_config":{"hello": "anything can go here"}}}
 	pluginCfg := loadConfig(pluginSlice, appCfg.PluginConfig)
+
 	ctx := map[string]*interface{}{}
 	return plugins{slice: pluginSlice, cfg: pluginCfg, ctx: ctx}
 }
@@ -55,15 +63,23 @@ func getEnabled(enabled []string) pluginsSlice {
 	}
 
 	enabledPlugins := pluginsSlice{}
+
+	// initPluginsは初期化時に登録されたプラグインリストである
 	for _, plugin := range initPlugins {
+
+		// 指定されたプラグインが「initPlugins」の初期化時に登録されたプラグイン情報に含まれているかをチェックする。
 		if _, ok := enabledM[plugin.info.Name]; !ok {
+			// 初期化時に登録されたプラグインが、引数としては指定されていないプラグインの場合
 			log.Infoln("getEnabled skipping: '" + plugin.info.Name + "'")
 			continue
 		}
+
+		// 初期化時に登録されたプラグインが、getEnabledの引数に指定されたプラグインの場合にはenabledPluginsに追加する
 		log.Infoln("plugin enabling: '" + plugin.info.Name + "'")
 		enabledPlugins = append(enabledPlugins, plugin)
 	}
 
+	// 有効となるプラグイン一覧をソートして応答する
 	sort.Sort(enabledPlugins)
 	return enabledPlugins
 }
@@ -97,6 +113,7 @@ type Plugins interface {
 }
 
 func AddPlugin(priority uint64, funcs Funcs, description, version string) {
+
 	_, filename, _, ok := runtime.Caller(1)
 	if !ok {
 		fmt.Println(time.Now().Format(time.RFC3339Nano) + " Error plugin.AddPlugin: runtime.Caller failed, can't get plugin names") // print, because this is called in init, loggers don't exist yet
@@ -177,6 +194,7 @@ func (p pluginsSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 var initPlugins = pluginsSlice{}
 
 func (ps plugins) OnStartup(d StartupData) {
+	//プラグイン毎にイテレーションする
 	for _, p := range ps.slice {
 		ictx := interface{}(nil)
 		ps.ctx[p.info.Name] = &ictx

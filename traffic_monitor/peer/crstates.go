@@ -278,6 +278,7 @@ func (t *CRStatesPeersThreadsafe) numAvailablePeers() int {
 }
 
 // Set sets the internal Traffic Monitor peer state and Crstates data. This MUST NOT be called by multiple goroutines.
+// 内部的なTraffic Monitorのpeer状態やcrstatesをセットします。
 func (t *CRStatesPeersThreadsafe) Set(result Result) {
 	t.m.Lock()
 	t.crStates[result.ID] = result.PeerStates

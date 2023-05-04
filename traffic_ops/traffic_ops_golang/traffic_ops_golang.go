@@ -103,6 +103,8 @@ func main() {
 			// 設定ファイル中のdisabled_routesにIDが指定されていたら、disableされたエンドポイントであることを示す。
 			// 指定されたIDのエンドポイントは無効化できることを表します。
 			disabledRoutes := routing.GetRouteIDMap(cfg.DisabledRoutes)
+
+			// 提供されているAPIエンドポイント毎にイテレーションする。内部ではdisableRoutesに該当するかをチェックして、該当していればその情報を「is_disabled=true」のように出力する
 			for _, r := range routes {
 				_, isDisabled := disabledRoutes[r.ID]
 
@@ -110,7 +112,9 @@ func main() {
 				// 例:  id=541357729077	method=GET	version=4.0	path=OC/FCI/advertisement/?$
 				fmt.Printf("%s\tis_disabled=%t\n", r, isDisabled) 
 			}
+
 		} else {
+			//  --cfgが指定されていない場合には、APIのエンドポイントの情報を出力する
 			for _, r := range routes {
 				fmt.Printf("%s\n", r)
 			}
@@ -188,7 +192,7 @@ func main() {
 	// TrafficVaultに関する設定の取得を行う
 	trafficVault := setupTrafficVault(*riakConfigFileName, &cfg)
 
-	// TODO combine
+	// cdn.confに指定された有効なプラグイン情報のオブジェクト情報を取得する。(cdn.confに指定された「plugin」、「plugin_config」の設定を参照する)
 	plugins := plugin.Get(cfg)
 
 	// 設定: profiling_enabledを取得する
@@ -224,7 +228,7 @@ func main() {
 	mux := http.NewServeMux()
 	d := routing.ServerData{DB: db, Config: cfg, Profiling: &profiling, Plugins: plugins, TrafficVault: trafficVault, Mux: mux}
 
-	// APIエンドポイントの登録は下記で行います。
+	// (重要) **メイン処理** TrafficOps APIエンドポイントの登録は下記で行います。APIエンドポイント毎のハンドラマッピングも下記で定義されています。
 	if err := routing.RegisterRoutes(d); err != nil {
 		log.Errorf("registering routes: %v\n", err)
 		os.Exit(1)
@@ -420,15 +424,18 @@ func getNewBackendConfig(backendConfigFileName *string) (config.BackendConfig, e
 }
 
 func setNewProfilingInfo(configFileName string, currentProfilingEnabled *bool, currentProfilingLocation *string, version string) {
+
 	newProfilingEnabled, newProfilingLocation, err := reloadProfilingInfo(configFileName)
 	if err != nil {
 		log.Errorln("reloading config: ", err.Error())
 		return
 	}
+
 	if newProfilingLocation != "" && *currentProfilingLocation != newProfilingLocation {
 		*currentProfilingLocation = newProfilingLocation
 		log.Infof("profiling location set to: %s\n", *currentProfilingLocation)
 	}
+
 	if *currentProfilingEnabled != newProfilingEnabled {
 		log.Infof("profiling enabled set to %t\n", newProfilingEnabled)
 		log.Infof("profiling location set to: %s\n", *currentProfilingLocation)
@@ -437,6 +444,7 @@ func setNewProfilingInfo(configFileName string, currentProfilingEnabled *bool, c
 			continuousProfile(currentProfilingEnabled, currentProfilingLocation, version)
 		}
 	}
+
 }
 
 // errorLogLocationの値をバリデーションし、rawProfilingLocationのパスディレクトリが存在することを検証する。
@@ -469,14 +477,17 @@ func getProcessedProfilingLocation(rawProfilingLocation string, errorLogLocation
 }
 
 func reloadProfilingInfo(configFileName string) (bool, string, error) {
+
 	cfg, err := config.LoadCdnConfig(configFileName)
 	if err != nil {
 		return false, "", err
 	}
+
 	profilingLocation, err := getProcessedProfilingLocation(cfg.ProfilingLocation, cfg.LogLocationError)
 	if err != nil {
 		return false, "", err
 	}
+
 	return cfg.ProfilingEnabled, profilingLocation, nil
 }
 

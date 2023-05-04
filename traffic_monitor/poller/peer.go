@@ -138,9 +138,8 @@ func (p PeerPoller) Poll() {
 				pollerCtx = pollerObj.Init(pollerCfg, p.GlobalContexts[info.PollType])
 			}
 
-			// HTTPポーリング処理や結果の解析処理は下記で行います。
+			// HTTPポーリング処理や結果の解析処理は下記で行います。必要な数だけここのgoroutine(Polling関数)が呼ばれます。これはkill(killChans)チャネルに送信することで停止できます。
 			go peerPoller(info.Interval, info.ID, info.URLs, info.Format, p.Handler, pollerObj.Poll, pollerCtx, kill)
-
 		}
 
 		// 設定オブジェクトを差し替える

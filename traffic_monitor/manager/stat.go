@@ -173,7 +173,7 @@ func StartStatHistoryManager(
 					// This extra level is necessary, because Go selects aren't ordered, so even after the Flush timer expires, the "case" could still never get hit,
 					// if there were continuously results from <-cacheStatChan at the same level.
 					select {
-					case r := <-cacheStatChan:
+					case r := <-cacheStatChan:  // 実際にはresultChanを受信しています。
 						results = append(results, r)
 						// we're still processing as much as possible, and flushing, don't break to the outer Buffer loop, until we process.
 					default:
@@ -188,7 +188,7 @@ func StartStatHistoryManager(
 
 		results = []cache.Result{}
 		// no point doing anything, until we read at least one stat. If stat polling is disabled, this blocks forever
-		results = append(results, <-cacheStatChan)
+		results = append(results, <-cacheStatChan)  // 実際にはresultChanを受信しています。
 
 		// buffer loop - never breaks - calls flushLoop to actually process, when the buffer time elapses.
 		for {
@@ -313,6 +313,9 @@ func processStatResults(
 
 	pollerName := "stat"
 	health.CalcAvailability(results, pollerName, &statResultHistoryThreadsafe, mc, toData, localCacheStatusThreadsafe, localStates, events, pollingProtocol)
+
+	// StartStateCombinerの2番目の戻り値で返された無名関数を実行する
+	// やっていることはStartStateCombiner()に定義されたcombineStateChanチャネルに送信して、同一関数のgoroutineとして定義された「for range combineStateChan」を開始させる役割を持つ
 	combineState()
 
 	endTime := time.Now()

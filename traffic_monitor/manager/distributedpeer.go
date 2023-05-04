@@ -41,6 +41,7 @@ func StartDistributedPeerManager(
 	go func() {
 
 		for distributedPeerResult := range distributedPeerChan {  // distributedPeerChanを受信するまでここで待機する
+
 			compareDistributedPeerState(events, distributedPeerResult, distributedPeerStates)
 			distributedPeerStates.Set(distributedPeerResult)
 

@@ -125,6 +125,8 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 		toData,
 	)
 
+	// 複数台のTrafficMonitorの統合を行なう関数です。
+	// 特定のチャネルを受信したら、起動したgoroutineの中でステータスのマージ処理が行われるようになっています。
 	combinedStates, combineStateFunc := StartStateCombiner(events, peerStates, localStates, toData)
 
 	StartPeerManager(
@@ -213,8 +215,9 @@ func Start(opsConfigFile string, cfg config.Config, appData config.StaticAppData
 // healthTickListener listens for health ticks, and writes to the health iteration variable. Does not return.
 func healthTickListener(cacheHealthTick <-chan uint64, healthIteration threadsafe.Uint) { // cacheHealthTickは受信専用チャネル
 
-	// TODO: どこからcacheHealthTickチャネルを受信するのか?
+	// TODO: どこからcacheHealthTickチャネルが送信されてくるのか?
 	for i := range cacheHealthTick { // cacheHealthTickチャネルから新しい値が受信されるまで待機し、値が受信された場合は、healthIteration 変数にその値を設定します。
+		// healthIterationには「Uint{val: &v} 」という構造体が格納されていて、1つしかフィールドが存在しない場合にはhealthIteration.Set(i)と記述しても問題ないようです。2つ以上の場合には明示的なフィールドの指定が必要です
 		healthIteration.Set(i)
 	}
 

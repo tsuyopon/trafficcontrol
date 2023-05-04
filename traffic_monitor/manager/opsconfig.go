@@ -86,6 +86,7 @@ func StartOpsConfigManager(
 
 	// TODO remove change subscribers, give Threadsafes directly to the things that need them. If they only set vars, and don't actually do work on change.
 	onChange := func(bytes []byte, err error) {
+
 		if err != nil {
 			handleErr(err)
 			return
