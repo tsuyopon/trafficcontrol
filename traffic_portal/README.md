@@ -28,3 +28,15 @@ Installation / configuration instructions may be found in [the `build/` director
 
 `-c CONFIG`
     Specify a configuration file to use at path `CONFIG`, rather than just one of `conf/config.js`, `conf/configDev.js`, or the RPM install location (`/etc/traffic_portal/conf/config.js`)
+
+
+# 重要なファイル群
+- server.js
+  - HTTPSサーバを起動させるためのJSです。
+- app/src/app.js
+  - AngularJSのための設定プログラムです
+- 各種リクエストクラスについては以下に存在します。
+  - app/src/common/
+- HTTPリクエストの共通は下記にあります
+  - app/src/common/api/HttpService.js
+

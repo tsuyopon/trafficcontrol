@@ -18,4 +18,4 @@
  */
 
 module.exports = angular.module('trafficPortal.application', [])
-    .service('applicationService', require('./ApplicationService'));
+    .service('applicationService', require('./ApplicationService')); // ./app/src/common/service/application/ApplicationService.js

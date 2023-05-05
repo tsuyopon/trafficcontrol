@@ -19,6 +19,7 @@
 
 var TableCdniController = function(tableName, cdniRequests, $scope, locationUtils) {
 
+	// app/src/common/api/CdniService.js で定義されています
 	$scope.cdniRequests = cdniRequests.map(
 		function(x) {
 			// need to convert this to a date object for ag-grid filter to work properly
@@ -27,6 +28,8 @@ var TableCdniController = function(tableName, cdniRequests, $scope, locationUtil
 		});
 
 	/** The columns of the ag-grid table */
+	// fieldの値については下記とマッピングされています
+	// https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/oc_ci_configuration_requests.html
 	$scope.columns = [
 		{
 			headerName: "Upstream CDN",

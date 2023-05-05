@@ -17,8 +17,10 @@
  * under the License.
  */
 
+// 「HttpService.$inject = ['$http', '$q'];」の箇所で指定された2つのオブジェクトがインジェクションされている。
 var HttpService = function($http, $q) {
 
+    // GETメソッド
     this.get = function(resource) {
         const deferred = $q.defer();
 
@@ -35,6 +37,7 @@ var HttpService = function($http, $q) {
         return deferred.promise;
     };
 
+    // POSTメソッド
     this.post = function(resource, payload) {
         const deferred = $q.defer();
 
@@ -51,6 +54,7 @@ var HttpService = function($http, $q) {
         return deferred.promise;
     };
 
+    // PUTメソッド
     this.put = function(resource, payload) {
         const deferred = $q.defer();
 
@@ -67,6 +71,8 @@ var HttpService = function($http, $q) {
         return deferred.promise;
     };
 
+
+    // DELETEメソッド
     this.delete = function(resource) {
         const deferred = $q.defer();
 
@@ -85,5 +91,10 @@ var HttpService = function($http, $q) {
 
 };
 
+// $httpと$qはAngularJSのモジュール機能です。HttpServiceの際にはこれら2つがDIとして依存注入されるようになります。
+//    $http: https://docs.angularjs.org/api/ng/service/$http
+//       -> Ajax関連の操作が行えます
+//    $q: https://docs.angularjs.org/api/ng/service/$q
+//       -> Promise関連の処理を制御できる
 HttpService.$inject = ['$http', '$q'];
 module.exports = HttpService;

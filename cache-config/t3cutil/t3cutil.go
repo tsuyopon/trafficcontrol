@@ -76,11 +76,13 @@ func CommentsFilter(body []string, lineComment string) []string {
 
 // PermCk will compare file permissions against existing file and octal permission provided.
 func PermCk(path string, perm int) bool {
+
 	mode := os.FileMode(perm)
 	file, err := os.Stat(path)
 	if err != nil {
 		fmt.Println("Error getting file status", path)
 	}
+
 	if file.Mode() != mode.Perm() {
 		return true
 	}
@@ -89,14 +91,26 @@ func PermCk(path string, perm int) bool {
 
 // OwnershipCk will compare owner and group settings against existing file and owner/group settings provided.
 func OwnershipCk(path string, uid int, gid int) bool {
+
+	// fileのstat情報が取得できるかどうか
 	file, err := os.Stat(path)
 	if err != nil {
 		fmt.Println("error getting file status", path)
 	}
+
+	// x.(T)によりxはインターフェース型、Tは変換したい型を表します。 
+	// これはType Assertionといい、インタフェース型の変数に対して、実際の型をアサーションすることで元の型に変換する方法です。
+	// cf. https://go.dev/ref/spec#Type_assertions
+	//
+	// 上記のxに相当するfile.Sys()はインタフェース型です。Tに相当するのが(*syscall.Stat_t)となります。
+	//
+	// なお以下は「stat := file.Sys()」だとコンパイルエラーになります。
+	// Stat_t構造体: https://pkg.go.dev/syscall#Stat_t
 	stat := file.Sys().(*syscall.Stat_t)
 	if uid != int(stat.Uid) || gid != int(stat.Gid) {
 		return true
 	}
+
 	return false
 }
 

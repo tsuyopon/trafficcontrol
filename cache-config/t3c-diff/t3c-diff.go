@@ -45,6 +45,8 @@ var Version = "0.4"
 var GitRevision = "nogit"
 
 func main() {
+
+	// オプションの指定
 	help := getopt.BoolLong("help", 'h', "Print usage info and exit")
 	version := getopt.BoolLong("version", 'V', "Print version information and exit")
 	lineComment := getopt.StringLong("line_comment", 'l', "#", "Comment symbol")
@@ -57,6 +59,7 @@ func main() {
 
 	log.Init(os.Stderr, os.Stderr, os.Stderr, os.Stderr, os.Stderr)
 
+	// -hと-Vは出力して終了
 	if *help {
 		log.Errorln(usageStr)
 		os.Exit(0)
@@ -65,6 +68,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	// このプログラムでは引数は3未満なら終了
 	if len(os.Args) < 3 {
 		log.Errorln(usageStr)
 		os.Exit(3)
@@ -73,15 +77,18 @@ func main() {
 	fileNameA := strings.TrimSpace(*fa)
 	fileNameB := strings.TrimSpace(*fb)
 
+	// fileNameAかfileNameBの文字列が空ならエラー
 	if len(fileNameA) == 0 || len(fileNameB) == 0 {
 		log.Errorln(usageStr)
 		os.Exit(4)
 	}
 
+	// UIDがrootの場合。EUIDであることに注意。
 	if *uid == 0 {
 		*uid = os.Geteuid()
 	}
 
+	// GIDがrootの場合
 	if *gid == 0 {
 		*gid = os.Getgid()
 	}
@@ -91,6 +98,7 @@ func main() {
 		log.Errorf("error reading first: %s\n", err.Error())
 		os.Exit(5)
 	}
+
 	fileB, fileBExisted, err := readFileOrStdin(fileNameB)
 	if err != nil {
 		log.Errorf("error reading second: %s\n", err.Error())
@@ -111,8 +119,8 @@ func main() {
 
 	// fileAとfileBで２つの内容が異なる場合には差分を計算します。
 	if fileA != fileB {
-
-		// 先頭文字列が「+」や「-」で始まる値を抽出します。(diffコマンドでの差分はこのフォーマット)
+		// ファイルの先頭文字列が「+」や「-」で始まる場合にはマッチさせる。つまりdiffで表示されるルールと同じ。
+		// なお(?m)はマルチラインモードを表す(cf: https://cpoint-lab.co.jp/article/202003/14542/)
 		match := regexp.MustCompile(`(?m)^\+.*|^-.*`)
 		changes := diff.Diff(fileA, fileB)
 
@@ -120,16 +128,17 @@ func main() {
 		for _, change := range match.FindAllString(changes, -1) {
 			fmt.Println(change)
 		}
+
 		os.Exit(1)
 	}
 
-	// fileAとfileBが両方存在しない場合には終了します。
+	// 「fileAが存在してfileBが存在しない」、「fileBが存在して、fileAが存在しない」といったfileAとfileB両者の存在状態が異なる場合には処理が終了します
 	if fileAExisted != fileBExisted {
 		os.Exit(1)
 	}
 
-	// ファイルがstdinでなければpermissionチェックとownerチェックを行います。
 	switch {
+	// fileNameAが標準入力(STDIN)でない場合、fileNameAのパーミッションとOwner情報をチェックする
 	case fileNameA != "stdin":
 		if t3cutil.PermCk(fileNameA, *mode) {
 			log.Infoln("File permissions are incorrect, should be ", fmt.Sprintf("%#o", *mode))
@@ -139,6 +148,7 @@ func main() {
 			log.Infoln("user or group ownership are incorrect, should be ", fmt.Sprintf("Uid:%d Gid:%d", *uid, *gid))
 			os.Exit(1)
 		}
+	// fileNameBが標準入力(STDIN)でない場合、fileNameBのパーミッションとOwner情報をチェックする
 	case fileNameB != "stdin":
 		if t3cutil.PermCk(fileNameB, *mode) {
 			log.Infoln("File permissions are incorrect, should be ", fmt.Sprintf("%#o", *mode))
@@ -149,6 +159,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
 	os.Exit(0)
 
 }
@@ -174,6 +185,8 @@ if the file being created or deleted is semantically empty.`
 // readFileOrStdin reads the file, or if fileOrStdin is 'stdin', reads from stdin.
 // Returns the file, whether it existed, and any error.
 func readFileOrStdin(fileOrStdin string) (string, bool, error) {
+
+	// 標準入力として読み込めない場合にはエラー
 	if strings.ToLower(fileOrStdin) == "stdin" {
 		bts, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
@@ -181,6 +194,8 @@ func readFileOrStdin(fileOrStdin string) (string, bool, error) {
 		}
 		return string(bts), true, nil
 	}
+
+	// ファイルを読み込めない場合にはエラー
 	bts, err := ioutil.ReadFile(fileOrStdin)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -188,5 +203,6 @@ func readFileOrStdin(fileOrStdin string) (string, bool, error) {
 		}
 		return "", false, errors.New("reading file: " + err.Error())
 	}
+
 	return string(bts), true, nil
 }

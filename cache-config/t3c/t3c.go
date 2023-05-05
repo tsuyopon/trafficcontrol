@@ -58,11 +58,17 @@ const ExitCodeCommandErr = 3
 const ExitCodeExeErr = 4
 const ExitCodeCommandLookupErr = 5
 
+// t3cで始まる全てのコマンドのラッパーになります。
 func main() {
+
 	flagHelp := getopt.BoolLong("help", 'h', "Print usage information and exit")
 	flagVersion := getopt.BoolLong("version", 'V', "Print version information and exit.")
 	getopt.Parse()
+
+	// 5つのログレベルで初期化します。最初は全てStderrとして登録されます。
 	log.Init(os.Stderr, os.Stderr, os.Stderr, os.Stderr, os.Stderr)
+
+	// -hや-Vの場合にはメッセージを表示してプログラムを終了します。
 	if *flagHelp {
 		log.Errorln(usageStr())
 		os.Exit(ExitCodeSuccess)
@@ -71,21 +77,24 @@ func main() {
 		os.Exit(ExitCodeSuccess)
 	}
 
+	// 引数が2つ未満の場合には指定方法が間違っているので処理を終了します
 	if len(os.Args) < 2 {
 		log.Errorf("no command\n\n%s", usageStr())
 		os.Exit(ExitCodeNoCommand)
 	}
 
+	// t3cではコマンド引数が下記のいずれかでないとエラーになります。
+	//   apply, check, diff, generate, preprocess, request, update
 	cmd := os.Args[1]
 	if _, ok := commands[cmd]; !ok {
 		log.Errorf("unknown command\n%s", usageStr())
 		os.Exit(ExitCodeUnknownCommand)
 	}
 
-	// t3c-xxxxコマンドを呼び出すことがわかる。つまり、t3c.goはwrapperプログラムであることがわかる。
+	// t3c-xxxxコマンドの文字列名称を生成します。例えば、「t3c apply 〜」ならば「t3c-apply」がここで生成されます。
 	app := "t3c-" + cmd
 
-	// コマンドがあるかどうかをチェックする
+	// 指定されたプログラム名のパスが実在するかどうかを探索します。
 	appPath, err := exec.LookPath(app)
 	if err != nil {
 		log.Errorf("error finding path to '%s': %s\n", app, err.Error())
@@ -95,9 +104,10 @@ func main() {
 	// 2番目以降の引数はそのまま指定させる
 	args := append([]string{app}, os.Args[2:]...)
 
-	// OS環境変数を引き継がせるために取得する
+	// 指定された環境変数を引き継がせます
 	env := os.Environ()
 
+	// 指定された引数と環境変数を指定して、
 	if err := syscall.Exec(appPath, args, env); err != nil {
 		log.Errorf("error executing sub-command '%s': %s\n", appPath, err.Error())
 		os.Exit(ExitCodeCommandErr)
