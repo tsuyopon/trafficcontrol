@@ -113,11 +113,14 @@ func NewHandler(
 	httpsConns *web.ConnMap,
 	interfaceName string,
 ) *Handler {
+
+	// ホスト名の取得
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Errorf("getting  hostname: %v\n", err)
 	}
 
+	// Handlerオブジェクトのアドレス返却
 	return &Handler{
 		remapper:        remapper,
 		getter:          thread.NewGetter(),
@@ -223,7 +226,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	connectionClose := h.connectionClose || remappingProducer.ConnectionClose()
 
-	beforeCacheLookUpData := plugin.BeforeCacheLookUpData{Req: r, DefaultCacheKey: remappingProducer.CacheKey(), CacheKeyOverrideFunc: remappingProducer.OverrideCacheKey}
+	BeforeCacheLookUpData := plugin.BeforeCacheLookUpData{Req: r, DefaultCacheKey: remappingProducer.CacheKey(), CacheKeyOverrideFunc: remappingProducer.OverrideCacheKey}
 	h.plugins.OnBeforeCacheLookup(remappingProducer.PluginCfg(), pluginContext, beforeCacheLookUpData)
 
 	cacheKey := remappingProducer.CacheKey()

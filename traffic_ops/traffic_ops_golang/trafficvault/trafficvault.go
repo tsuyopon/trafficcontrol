@@ -104,6 +104,7 @@ type LoadFunc func(json.RawMessage) (TrafficVault, error)
 // AddBackend should be called by each TrafficVault backend package's init() function in order
 // to register its name and LoadFunc. This name corresponds to the traffic_vault_backend option
 // in cdn.conf.
+// "riak"や"postgres"のloaderはここから登録される
 func AddBackend(name string, loadConfig LoadFunc) {
 	backends[name] = loadConfig
 }
@@ -112,10 +113,14 @@ func AddBackend(name string, loadConfig LoadFunc) {
 // options in cdn.conf, respectively, in order to lookup and load the chosen Traffic Vault
 // backend to use.
 func GetBackend(name string, cfgJson json.RawMessage) (TrafficVault, error) {
+
+	// ここにはAddBackend()により登録される。「postgres」や「riak」はAddBackend()により登録されている
 	loader, ok := backends[name]
 	if !ok {
 		return nil, fmt.Errorf("no supported Traffic Vault backend named '%s' was found", name)
 	}
+
+	// 「postgres」のloaderについてはtraffic_ops_golang/trafficvault/backends/postgres/postgres.goのAddBackend()の第２引数で指定されるpostgresLoad()が呼ばれる
 	backend, err := loader(cfgJson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load backend '%s': %s", name, err.Error())

@@ -45,6 +45,7 @@ type StaticAppData struct {
 // getStaticAppData returns app data available at start time.
 // This should be called immediately, as it includes calculating when the app was started.
 func GetStaticAppData(version, gitRevision, buildTimestamp string) (StaticAppData, error) {
+
 	var d StaticAppData
 	var err error
 	d.StartTime = time.Now()
@@ -62,6 +63,7 @@ func GetStaticAppData(version, gitRevision, buildTimestamp string) (StaticAppDat
 
 	d.UserAgent = fmt.Sprintf("%s/%s", filepath.Base(d.Name), d.Version)
 	return d, nil
+
 }
 
 // getHostNameWithoutDomain returns the machine hostname, without domain information.
@@ -80,10 +82,16 @@ func getHostNameWithoutDomain() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// hostnameが設定されていなければエラー
 	hostname := out.String()
 	if len(hostname) < 1 {
 		return "", fmt.Errorf("OS returned empty hostname")
 	}
+
+	// hostnameをセットしてreturnする。最後の1文字は通常の文字列ではなくEOLを表している?
 	hostname = hostname[:len(hostname)-1] // removing EOL
 	return hostname, nil
+
+
 }

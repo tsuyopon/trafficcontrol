@@ -35,10 +35,16 @@ func StartPeerManager(
 
 	// 無名関数のgoroutineを起動する
 	go func() {
+
 		for peerResult := range peerChan {
+
+			// 内部的なTraffic Monitorのpeerの情報をセットします
 			comparePeerState(events, peerResult, peerStates)
 			peerStates.Set(peerResult)
+
 			combineState()
+
+			// 下記ではチャネル送信をしています。なお、このチャネルはpeerPoller()でチャネル受信されています。
 			peerResult.PollFinished <- peerResult.PollID
 		}
 	}()

@@ -101,6 +101,7 @@ const NoAuth = false
 
 func handlerToFunc(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// routing/routes.goのServeHTTPを呼び出す
 		handler.ServeHTTP(w, r)
 	}
 }
@@ -116,6 +117,8 @@ func GetRouteIDMap(IDs []int) map[int]struct{} {
 
 // Routes returns the API routes, raw non-API root level routes, and a catchall route for when no route matches.
 func Routes(d ServerData) ([]Route, http.Handler, error) {
+
+	// エンドポイントがマッチしなかったらなんでも受け付けるハンドラになる。 see: https://blog.sarabande.jp/post/90728554658
 	proxyHandler := rootHandler(d)
 
 	routes := []Route{
@@ -130,6 +133,8 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 		/**
 		 * 4.x API
 		 */
+
+		 // 構造体の最後に指定してあるのが、IDでdisabled_routesなどで無効なエンドポイントとして指定することができる値です。
 
 		// CDNI integration
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodGet, Path: `OC/FCI/advertisement/?$`, Handler: cdni.GetCapabilities, RequiredPrivLevel: auth.PrivLevelReadOnly, RequiredPermissions: []string{"CDNI-CAPACITY:READ"}, Authenticated: Authenticated, Middlewares: nil, ID: 541357729077},
@@ -915,6 +920,7 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 	}
 
 	// sanity check to make sure all Route IDs are unique
+	// 重複したroute設定が行われていないかどうかをチェックする
 	knownRouteIDs := make(map[int]struct{}, len(routes))
 	for _, r := range routes {
 		if _, found := knownRouteIDs[r.ID]; !found {
@@ -925,17 +931,22 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 	}
 
 	// check for unknown route IDs in cdn.conf
-	disabledRoutes := GetRouteIDMap(d.DisabledRoutes)
+	disabledRoutes := GetRouteIDMap(d.DisabledRoutes)  // disabled_routes設定が格納される。
 	unknownRouteIDs := []string{}
 	for _, routeMap := range []map[int]struct{}{disabledRoutes} {
 		for routeID := range routeMap {
+			// 存在しないIDがdisabled_routesに含まれている場合にはunknownRouteIDsにappendする
 			if _, known := knownRouteIDs[routeID]; !known {
 				unknownRouteIDs = append(unknownRouteIDs, fmt.Sprintf("%d", routeID))
 			}
 		}
 	}
+
+	// disabled_routesに存在する場合にはメッセージを表示しておく
 	if len(unknownRouteIDs) > 0 {
 		msg := "unknown route IDs in routing_blacklist: " + strings.Join(unknownRouteIDs, ", ")
+
+		// ignore_unknown_routes設定がtrueの場合には警告だけ表示しておく
 		if d.IgnoreUnknownRoutes {
 			log.Warnln(msg)
 		} else {
@@ -1001,9 +1012,15 @@ type ThrottledHandler struct {
 }
 
 func (m ThrottledHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	// URLのパスを"/"でsplitする
 	pathParts := strings.Split(r.URL.Path, "/")
+
+	// 上記のsplitした結果で3つ以上のフィールドがあれば2つ目をバージョンフィールドとして取得
 	if len(pathParts) >= 3 {
 		version, err := strconv.ParseFloat(pathParts[2], 64)
+
+		// TODO: これは一体何の分岐か?
 		if err == nil && version >= 2 { // do not default to Perl for versions over 2.x
 			api.WriteRespAlertNotFound(w, r)
 			return

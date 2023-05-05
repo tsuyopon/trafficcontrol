@@ -86,6 +86,7 @@ func StartOpsConfigManager(
 
 	// TODO remove change subscribers, give Threadsafes directly to the things that need them. If they only set vars, and don't actually do work on change.
 	onChange := func(bytes []byte, err error) {
+
 		if err != nil {
 			handleErr(err)
 			return
@@ -140,6 +141,8 @@ func StartOpsConfigManager(
 		// 設定「httpsListener」が空でなければ
 		if newOpsConfig.HttpsListener != "" {
 			httpsListenAddress := newOpsConfig.HttpsListener
+
+			// StaticFileDir="/opt/traffic_monitor/static/"
 			err = httpServer.RunHTTPSRedirect(listenAddress, httpsListenAddress, cfg.ServeReadTimeout, cfg.ServeWriteTimeout, cfg.StaticFileDir)
 			if err != nil {
 				handleErr(fmt.Errorf("MonitorConfigPoller: error creating HTTP server: %s\n", err))
@@ -216,15 +219,19 @@ func StartOpsConfigManager(
 		// These must be in a goroutine, because the monitorConfigPoller tick sends to a channel this select listens for. Thus, if we block on sends to the monitorConfigPoller, we have a livelock race condition.
 		// More generically, we're using goroutines as an infinite chan buffer, to avoid potential livelocks
 
-		for _, subscriber := range opsConfigChangeSubscribers {
+		// TODO: 以下の2つのfor文ではチャネルが破棄されるまで待機し続けるので、片方しか実行されない様にみえる。しかも、チャネルを受信したとしても再度同じチャネルに送信しているように見える。
+
+		for _, subscriber := range opsConfigChangeSubscribers {  // opsConfigChangeSubscribersチャネルがクローズされるまで実行される
 			// 以下のgoroutineは無名関数を即時実行しています。 
 			//  cf: https://qiita.com/hir1524/items/a270b00c420ed96f02f0#%E5%8D%B3%E6%99%82%E9%96%A2%E6%95%B0
 			// 即時実行なので最後の(subscriber)というのはその手前の無名関数の引数に指定される値です。
 			go func(s chan<- handler.OpsConfig) { s <- newOpsConfig }(subscriber)
 		}
-		for _, subscriber := range toChangeSubscribers {
+
+		for _, subscriber := range toChangeSubscribers {         // このfor文はtoChangeSubscribersチャネルがクローズされるまで実行される
 			go func(s chan<- towrap.TrafficOpsSessionThreadsafe) { s <- toSession }(subscriber)
 		}
+
 	}
 	// onChangeの無銘関数定義はここまで
 

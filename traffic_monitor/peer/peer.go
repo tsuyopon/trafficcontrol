@@ -52,6 +52,7 @@ type Result struct {
 
 // Handle handles a response from a polled Traffic Monitor peer, parsing the data and forwarding it to the ResultChannel.
 func (handler Handler) Handle(id string, r io.Reader, format string, reqTime time.Duration, reqEnd time.Time, err error, pollID uint64, usingIPv4 bool, pollCtx interface{}, pollFinished chan<- uint64) {
+
 	result := Result{
 		ID:           tc.TrafficMonitorName(id),
 		Available:    false,
@@ -61,6 +62,7 @@ func (handler Handler) Handle(id string, r io.Reader, format string, reqTime tim
 		Time:         reqEnd,
 	}
 
+	// エラーの場合
 	if err != nil {
 		log.Warnf("%s handler given error '%s'\n", id, err.Error())
 		result.Errors = append(result.Errors, err)
@@ -76,5 +78,6 @@ func (handler Handler) Handle(id string, r io.Reader, format string, reqTime tim
 		}
 	}
 
+	// manager/distributedpeer.goのStartDistributedPeerManager()の第１引数で受信される
 	handler.ResultChannel <- result
 }

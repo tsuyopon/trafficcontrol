@@ -123,7 +123,7 @@ func getIntervals(monitorConfig tc.TrafficMonitorConfigMap, cfg config.Config, l
 
 // StartMonitorConfigManager runs the monitor config manager goroutine, and returns the threadsafe data which it sets.
 func StartMonitorConfigManager(
-	monitorConfigPollChan <-chan poller.MonitorCfg,
+	monitorConfigPollChan <-chan poller.MonitorCfg,  // monitorConfigPoller.ConfigChannelが渡ってきてる
 	localStates peer.CRStatesThreadsafe,
 	peerStates peer.CRStatesPeersThreadsafe,
 	distributedPeerStates peer.CRStatesPeersThreadsafe,
@@ -226,15 +226,18 @@ func monitorConfigListen(
 
 	logMissingIntervalParams := true
 
-	for pollerMonitorCfg := range monitorConfigPollChan {
+	for pollerMonitorCfg := range monitorConfigPollChan { // チャネル受信したら動き出します
+
 		monitorConfig := pollerMonitorCfg.Cfg
 		cdn := pollerMonitorCfg.CDN
 		monitorConfigTS.Set(monitorConfig)
+
 		// todata/todata.go: Update()から呼ばれる
 		if err := toData.Update(toSession, cdn, monitorConfig); err != nil {
 			log.Errorln("Updating Traffic Ops Data: " + err.Error())
 		}
 
+		// 主要なpolling URL3つ(ヘルスチェックURL、統計情報URL、ピアURL)の初期化を行う
 		healthURLs := map[string]poller.PollConfig{}
 		statURLs := map[string]poller.PollConfig{}
 		peerURLs := map[string]poller.PeerPollConfig{}
@@ -253,32 +256,45 @@ func monitorConfigListen(
 			monitorConfig.TrafficServer,
 			monitorConfig.CacheGroup,
 		)
+
 		if err != nil {
 			log.Errorf("getting cachegroups to poll: %s", err.Error())
 			continue
 		}
+
 		log.Debugf("this TM's cachegroup: %s, cachegroups to poll: %v", thisTMGroup, cacheGroupsToPoll)
+
+		// TrafficServerでイテレーション
 		for _, srv := range monitorConfig.TrafficServer {
 			cacheName := tc.CacheName(srv.HostName)
 
 			srvStatus := tc.CacheStatusFromString(srv.ServerStatus)
+
+			// サーバステータスがONLINEの場合にはキャッシュ情報を追加する
 			if srvStatus == tc.CacheStatusOnline {
 				localStates.AddCache(cacheName, tc.IsAvailable{IsAvailable: true, Ipv6Available: srv.IPv6() != "", Ipv4Available: srv.IPv4() != "", DirectlyPolled: false})
 				continue
 			}
+
+			// サーバステータスが「REPORTEDでない」かつ「ADMIN_DOWNでない」場合にはcontinueする
 			if srvStatus != tc.CacheStatusReported && srvStatus != tc.CacheStatusAdminDown {
 				continue
 			}
+
+			// 対応する値が存在すればisDirectlyPolled=true、対応する値が存在しなければisDirectlyPolled=falseとなる
 			_, isDirectlyPolled := cacheGroupsToPoll[srv.CacheGroup]
+
 			// seed states with available = false until our polling cycle picks up a result
 			if _, exists := localStates.GetCache(cacheName); !exists {
 				localStates.AddCache(cacheName, tc.IsAvailable{IsAvailable: false, DirectlyPolled: isDirectlyPolled})
 			}
 
+			// 「cacheGroupsToPoll[srv.CacheGroup]」の値が取得できなければcontinue
 			if !isDirectlyPolled {
 				continue
 			}
 
+			// pollingのURLを取得します
 			pollURLStr := monitorConfig.Profile[srv.Profile].Parameters.HealthPollingURL
 			if pollURLStr == "" {
 				log.Errorf("monitor config server %v profile %v has no polling URL; can't poll", srv.HostName, srv.Profile)
@@ -291,24 +307,31 @@ func monitorConfigListen(
 				log.Infof("health.polling.format for '%v' is empty, using default '%v'", srv.HostName, format)
 			}
 
+			// PollingTypeを取得する
 			pollType := monitorConfig.Profile[srv.Profile].Parameters.HealthPollingType
 			if pollType == "" {
 				pollType = poller.DefaultPollerType
 				log.Infof("health.polling.type for '%v' is empty, using default '%v'", srv.HostName, pollType)
 			}
 
+			// TrafficServerへのHealthチェック用のポーリングURLを生成する
 			pollURL4Str, pollURL6Str := createServerHealthPollURLs(pollURLStr, srv)
 
+			// Connection Timeoutの取得
 			connTimeout := trafficOpsHealthConnectionTimeoutToDuration(monitorConfig.Profile[srv.Profile].Parameters.HealthConnectionTimeout)
 			if connTimeout == 0 {
 				connTimeout = DefaultHealthConnectionTimeout
 				log.Warnln("profile " + srv.Profile + " health.connection.timeout Parameter is missing or zero, using default " + DefaultHealthConnectionTimeout.String())
 			}
 
+			// ホスト毎のヘルスチェックURLがセットされる。この関数の最後に別チャネルに送信する
 			healthURLs[srv.HostName] = poller.PollConfig{URL: pollURL4Str, URLv6: pollURL6Str, Host: srv.FQDN, Timeout: connTimeout, Format: format, PollType: pollType}
 
+			// TrafficServerへの統計情報取得用のURL(IPv4, IPv6)を生成する
 			statURL4 := createServerStatPollURL(pollURL4Str)
 			statURL6 := createServerStatPollURL(pollURL6Str)
+
+			// ホスト毎の統計情報取得URLがセットされる。この関数の最後に別チャネルに送信する
 			statURLs[srv.HostName] = poller.PollConfig{URL: statURL4, URLv6: statURL6, Host: srv.FQDN, Timeout: connTimeout, Format: format, PollType: pollType}
 		}
 
@@ -321,41 +344,63 @@ func monitorConfigListen(
 			tmsByGroup[srv.Location] = append(tmsByGroup[srv.Location], srv)
 		}
 
+		// TrafficMonitor分だけイテレーションする
 		for _, srv := range monitorConfig.TrafficMonitor {
+
+			// TBD: これは何?
 			if srv.HostName == staticAppData.Hostname || (cfg.DistributedPolling && srv.Location != thisTMGroup) {
 				continue
 			}
+
+			// TBD: これは何?
 			if srv.ServerStatus != thisTMStatus {
 				continue
 			}
+
 			// TODO: the URL should be config driven. -jse
+			// peerURLは「http://<server>:<port>/publish/CrStates?raw」としてHostName毎に設定される。peerURLsはpeerURLSubscriberチャネル送信時に送付されている
 			peerURL := fmt.Sprintf("http://%s:%d/publish/CrStates?raw", srv.FQDN, srv.Port)
 			peerURLs[srv.HostName] = poller.PeerPollConfig{URLs: []string{peerURL}}
+
 			peerSet[tc.TrafficMonitorName(srv.HostName)] = struct{}{}
 		}
+
 		distributedPeerURLs := make(map[string]poller.PeerPollConfig)
 		distributedPeerSet := make(map[tc.TrafficMonitorName]struct{}, len(tmsByGroup)-1)
 		for tmGroup, tms := range tmsByGroup {
+
+			// TBD: 何をしているのか?
 			if tmGroup == thisTMGroup {
 				continue
 			}
+
+			// 「/publish/CrStates?local」のTrafficMonitorへのURLを生成する
 			distributedPeerURLs[tmGroup] = poller.PeerPollConfig{URLs: getDistributedPeerURLs(tms)}
 			distributedPeerSet[tc.TrafficMonitorName(tmGroup)] = struct{}{}
 		}
 		distributedPeerStates.SetTimeout((intervals.Peer + cfg.HTTPTimeout) * 2)
 		distributedPeerStates.SetPeers(distributedPeerSet)
 
+		/* 4ヶ所ぐらいチャネルにConfigを送信するヶ所があるので、共通として記載。Urlsには配列として複数入ることがあります */
+
+		// 統計情報をPollingするために必要な情報をチャネルに送信している (補足) diffConfigしているのはこの情報
 		if cfg.StatPolling {
 			statURLSubscriber <- poller.CachePollerConfig{Urls: statURLs, PollingProtocol: cfg.CachePollingProtocol, Interval: intervals.Stat, NoKeepAlive: intervals.StatNoKeepAlive}
 		}
+
+		// Pollingに必要な情報をhealthURLSubscriberチャネルやpeerURLSubscriberチャネルに送付している。 (補足)diffConfigしているのはこの情報
 		healthURLSubscriber <- poller.CachePollerConfig{Urls: healthURLs, PollingProtocol: cfg.CachePollingProtocol, Interval: intervals.Health, NoKeepAlive: intervals.HealthNoKeepAlive}
 		peerURLSubscriber <- poller.PeerPollerConfig{Urls: peerURLs, Interval: intervals.Peer, NoKeepAlive: intervals.PeerNoKeepAlive}
+
+		// 設定 `distributed_polling=true`の場合には
 		if cfg.DistributedPolling {
+			// distributedPeerURLSubscriberチャンネルにpoller.PeerPollerConfigを送付している (補足)diffConfigしているのはこの情報
 			distributedPeerURLSubscriber <- poller.PeerPollerConfig{Urls: distributedPeerURLs, Interval: intervals.Peer, NoKeepAlive: intervals.PeerNoKeepAlive}
 		}
 
 		// MonitorConfigPoller.Pollの「<-p.IntervalChan」で受信される
 		toIntervalSubscriber <- intervals.TO
+
 		peerStates.SetTimeout((intervals.Peer + cfg.HTTPTimeout) * 2)
 		peerStates.SetPeers(peerSet)
 
@@ -366,10 +411,12 @@ func monitorConfigListen(
 			}
 		}
 
+		// ヘルスチェックすべきURLが1つも存在しない場合にはエラーログを表示する
 		if len(healthURLs) == 0 {
 			log.Errorf("No REPORTED caches exist in Traffic Ops, nothing to poll.")
 		}
 
+		// cachesChangeSubscriberチャネルに送信する
 		cachesChangeSubscriber <- struct{}{}
 
 		// TODO because there are multiple writers to localStates.DeliveryService, there is a race condition, where MonitorConfig (this func) and HealthResultManager could write at the same time, and the HealthResultManager could overwrite a delivery service addition or deletion here. Probably the simplest and most performant fix would be a lock-free algorithm using atomic compare-and-swaps.
@@ -508,6 +555,7 @@ func getDistributedPeerURLs(tms []tc.TrafficMonitor) []string {
 // possible) for IPv4 polls, and its IPv6 service address (when possible) for
 // IPv6 polls - NOT the servers hostname!
 func createServerHealthPollURLs(pollingURLStr string, srv tc.TrafficServer) (string, string) {
+
 	lid, err := tc.InterfaceInfoToLegacyInterfaces(srv.Interfaces)
 	if err != nil {
 		log.Errorf("Failed to parse polling strings for cache server '%s': %v", srv.HostName, err)
@@ -519,8 +567,11 @@ func createServerHealthPollURLs(pollingURLStr string, srv tc.TrafficServer) (str
 		infName = *lid.InterfaceName
 	}
 
+	IPv4の場合のポーリングURL生成
 	var pollingURL4Str string
 	if lid.IPAddress != nil && *lid.IPAddress != "" {
+
+		// pollingURLStr中の文字列を置き換える
 		pollingURL4Str = strings.NewReplacer(
 			"${hostname}", *lid.IPAddress,
 			"${interface_name}", infName,
@@ -531,6 +582,7 @@ func createServerHealthPollURLs(pollingURLStr string, srv tc.TrafficServer) (str
 		pollingURL4Str = insertPorts(pollingURL4Str, srv)
 	}
 
+	IPv6の場合のポーリングURL生成
 	var pollingURL6Str string
 	if lid.IP6Address != nil && *lid.IP6Address != "" {
 		r := strings.NewReplacer(

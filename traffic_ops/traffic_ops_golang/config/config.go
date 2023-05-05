@@ -316,7 +316,9 @@ func (c Config) EventLog() log.LogLocation {
 const BlockStartup = true
 const AllowStartup = false
 
+// 設定ファイルをunmarshalする (いくつかのバリデーションが行われている)
 func LoadBackendConfig(backendConfigPath string) (BackendConfig, error) {
+
 	confBytes, err := ioutil.ReadFile(backendConfigPath)
 	if err != nil {
 		return BackendConfig{}, fmt.Errorf("reading backend conf '%s': %v", backendConfigPath, err)
@@ -327,12 +329,19 @@ func LoadBackendConfig(backendConfigPath string) (BackendConfig, error) {
 	if err != nil {
 		return BackendConfig{}, fmt.Errorf("unmarshalling '%s': %v", backendConfigPath, err)
 	}
+
+	// $.routes、$.routes.hosts.でのイテレーション処理が行われている。backends.confを参照のこと
 	for _, r := range cfg.Routes {
+		// $.routes.opts.algorithmは空か「roundrobin」のいずれかでなければならない
 		if r.Opts.Algorithm != "" && r.Opts.Algorithm != "roundrobin" {
 			return cfg, errors.New("algorithm can only be roundrobin or blank")
 		}
+
 		for _, h := range r.Hosts {
+			// 例「https://localhost:8444」
 			rawURL := h.Protocol + "://" + h.Hostname + ":" + strconv.Itoa(h.Port)
+
+			// パースすることが可能な妥当性のあるURIかどうかをチェックしているだけ
 			if _, err = url.ParseRequestURI(rawURL); err != nil {
 				return cfg, fmt.Errorf("couldn't convert host info into a valid URI: %v", err)
 			}
@@ -341,18 +350,24 @@ func LoadBackendConfig(backendConfigPath string) (BackendConfig, error) {
 	return cfg, nil
 }
 
+// cdn.confを読み込み、go言語の構造体に変換する(SMTPの設定有無についても処理を考慮する)
 func LoadCdnConfig(cdnConfPath string) (Config, error) {
+
 	// load json from cdn.conf
+	// cdn.confをロードする
 	confBytes, err := ioutil.ReadFile(cdnConfPath)
 	if err != nil {
 		return Config{}, fmt.Errorf("reading CDN conf '%s': %v", cdnConfPath, err)
 	}
 
+	// jsonをgo言語の構造体に変換する
 	cfg := Config{}
 	err = json.Unmarshal(confBytes, &cfg)
 	if err != nil {
 		return Config{}, fmt.Errorf("unmarshalling '%s': %v", cdnConfPath, err)
 	}
+
+	// SMTP設定がnilの場合には、空のConfigSMTP構造体をセットする
 	if cfg.SMTP == nil {
 		cfg.SMTP = &ConfigSMTP{}
 	}
@@ -362,11 +377,14 @@ func LoadCdnConfig(cdnConfPath string) (Config, error) {
 // LoadConfig - reads the config file into the Config struct
 
 func LoadConfig(cdnConfPath string, dbConfPath string, appVersion string) (Config, []error, bool) {
+
 	// load cdn.conf
 	cfg, err := LoadCdnConfig(cdnConfPath)
 	if err != nil {
 		return Config{}, []error{fmt.Errorf("Loading cdn config from '%s': %v", cdnConfPath, err)}, BlockStartup
 	}
+
+	// バージョンを取得する
 	cfg.Version = appVersion
 
 	// load json from database.conf
@@ -382,12 +400,15 @@ func LoadConfig(cdnConfPath string, dbConfPath string, appVersion string) (Confi
 		_, _ = fmt.Fprintf(os.Stderr, "error parsing database port: '%s' is invalid. Using default %s\n", cfg.DB.Port, DefaultDBPort)
 		cfg.DB.Port = DefaultDBPort
 	}
+
+	// cdn.confに設定上の不備がないかをチェックする
 	cfg, err = ParseConfig(cfg)
 	if err != nil {
 		return Config{}, []error{fmt.Errorf("parsing config '%s': %v", cdnConfPath, err)}, BlockStartup
 	}
 
 	// check for and load ldap.conf
+	// 設定ldap_conf_locationが空でない場合にはLDAPが有効とみなす
 	if cfg.LDAPConfPath != "" {
 		cfg.LDAPEnabled, cfg.ConfigLDAP, err = GetLDAPConfig(cfg.LDAPConfPath)
 		if err != nil {
@@ -408,6 +429,7 @@ func LoadConfig(cdnConfPath string, dbConfPath string, appVersion string) (Confi
 		}
 	}
 
+	// 設定influxdb_conf_pathによって処理のだしわけ処理を行う
 	idbPath := cfg.InfluxDBConfPath
 	if idbPath == "" {
 		mojoMode := os.Getenv("MOJO_MODE")

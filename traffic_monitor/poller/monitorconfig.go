@@ -50,6 +50,7 @@ func NewMonitorConfig(interval time.Duration) MonitorConfigPoller {
 		Interval:       interval,
 		SessionChannel: make(chan towrap.TrafficOpsSessionThreadsafe),
 		// ConfigChannel MUST have a buffer size 1, to make the nonblocking writeConfig work
+		// ConfigChannelはチャネル数が1
 		ConfigChannel:    make(chan MonitorCfg, 1),
 		OpsConfigChannel: make(chan handler.OpsConfig),
 		IntervalChan:     make(chan time.Duration),
@@ -93,7 +94,7 @@ func (p MonitorConfigPoller) Poll() {
 
 		case opsConfig := <-p.OpsConfigChannel:
 			log.Infof("MonitorConfigPoller: received new opsConfig: %v\n", opsConfig)
-			p.OpsConfig = opsConfig   // 受け取った設定値をp.OpsConfigに書き込んでおき、終了する。(おそらく、タイマー起因でこの値がその後使われる)
+			p.OpsConfig = opsConfig   // 受け取った設定値をp.OpsConfigに書き込む
 
 		case session := <-p.SessionChannel:
 			log.Infof("MonitorConfigPoller: received new session: %v\n", session)
@@ -118,20 +119,26 @@ func (p MonitorConfigPoller) Poll() {
 
 		// タイマー時間が経過したら呼ばれる
 		case <-tick.C:
+			// セッションが未初期化 または opsConfでCdnNameが空の設定の場合には、処理をスキップする
 			if !p.Session.Initialized() || p.OpsConfig.CdnName == "" {
 				log.Warnln("MonitorConfigPoller: skipping this iteration, Session is nil")
 				continue
 			}
+
+			// 「/cdns/<cdn>/configs/monitoring」(GET)から取得してオブジェクトにマッピングする
 			monitorConfig, err := p.Session.TrafficMonitorConfigMap(p.OpsConfig.CdnName)
 			if err != nil {
 				log.Errorf("MonitorConfigPoller: %s\n %v\n", err, monitorConfig)
 				continue
 			}
+
 			// poll the CRConfig so that it is synchronized with the TMConfig
 			if _, err := p.Session.CRConfigRaw(p.OpsConfig.CdnName); err != nil {
 				log.Errorf("MonitorConfigPoller: error getting CRConfig: %v", err)
 				continue
 			}
+
+			// 書き込みチャネルにこの引数の情報(MonitorCfg)を引き渡す
 			p.writeConfig(MonitorCfg{CDN: p.OpsConfig.CdnName, Cfg: *monitorConfig})
 		}
 	}

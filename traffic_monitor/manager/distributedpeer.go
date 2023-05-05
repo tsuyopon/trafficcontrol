@@ -30,7 +30,7 @@ import (
 // directly (because combining peerStates is unnecessary since these results are already combined
 // among the distributed TM group they came from).
 func StartDistributedPeerManager(
-	distributedPeerChan <-chan peer.Result,
+	distributedPeerChan <-chan peer.Result,     // peer/peer.goのHandleから送信される可能がある
 	localStates peer.CRStatesThreadsafe,
 	distributedPeerStates peer.CRStatesPeersThreadsafe,
 	events health.ThreadsafeEvents,
@@ -39,18 +39,25 @@ func StartDistributedPeerManager(
 
 	// 無名関数のゴルーチンを呼び出す
 	go func() {
-		for distributedPeerResult := range distributedPeerChan {
+
+		for distributedPeerResult := range distributedPeerChan {  // distributedPeerChanを受信するまでここで待機する
+
 			compareDistributedPeerState(events, distributedPeerResult, distributedPeerStates)
 			distributedPeerStates.Set(distributedPeerResult)
+
 			for name, availability := range distributedPeerResult.PeerStates.Caches {
 				localStates.SetCache(name, availability)
 			}
+
 			if len(distributedPeerResult.Errors) == 0 {
 				unpolledCaches.SetRemotePolled(distributedPeerResult.PeerStates.Caches)
 			}
+
+			// peer.Result構造体中のPollFinishedチャネルに送信する
 			distributedPeerResult.PollFinished <- distributedPeerResult.PollID
 		}
 	}()
+
 }
 
 func compareDistributedPeerState(events health.ThreadsafeEvents, result peer.Result, distributedPeerStates peer.CRStatesPeersThreadsafe) {
