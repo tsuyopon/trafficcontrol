@@ -33,6 +33,7 @@ var ApplicationService = function($rootScope, $anchorScroll, $http, messageModel
         }
     };
 
+    // 無名関数を定義してinit変数に格納する
     let init = function() {
         $http.defaults.withCredentials = true;
 
@@ -53,6 +54,8 @@ var ApplicationService = function($rootScope, $anchorScroll, $http, messageModel
             messageModel.setMessages([ { level: 'warning', text: 'A browser that supports local storage is required to use ' + propertiesModel.properties.name } ], false);
         }
     };
+
+    // 手前で定義した無名関数を実行する
     init();
 
     $rootScope.$on("$viewContentLoaded", function() {

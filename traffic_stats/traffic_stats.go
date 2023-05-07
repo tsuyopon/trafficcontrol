@@ -149,6 +149,7 @@ func (c *KafkaCluster) ExportData(config StartupConfig, bps influx.BatchPoints, 
 	}
 }
 
+// InfluxDBやKafkaへのデータ送信を実施する
 func (influx InfluxClient) ExportData(config StartupConfig, bps influx.BatchPoints, retry bool) {
 	sendMetrics(config, bps, retry)
 }
@@ -238,12 +239,13 @@ func debugf(format string, args ...interface{}) {
 }
 
 func main() {
+
 	var Bps map[string]influx.BatchPoints
 	var config StartupConfig
 	var err error
 	var tickers Timers
 
-	// --cfgオプションから設定ファイルを取得してパース処理を行います。
+	// --cfgオプションから設定ファイルを取得してパース処理を行います。 ( サンプルファイル名称はtraffic_stats.cfgとして存在する )
 	configFile := flag.String("cfg", "", "The config file")
 	flag.Parse()
 	if *configFile == "" {
@@ -252,7 +254,6 @@ func main() {
 	}
 
 	config, err = loadStartupConfig(*configFile, config)
-
 	if err != nil {
 		err = fmt.Errorf("could not load startup config: %v", err)
 		errorln(err)
@@ -266,24 +267,31 @@ func main() {
 
 	configChan := make(chan RunningConfig)
 	go getToData(config, true, configChan)
+
+	// runningConfigチャネルにconfigChanを送信する
 	runningConfig := <-configChan
 
 	c := newKakfaCluster(config.KafkaConfig)
 
+	// タイマーのセットを行います。
 	tickers = setTimers(config)
 
+	// SIGINIT, SIGTERM, SIGQUIT用のチャネルを1つのみ生成する
 	termChan := make(chan os.Signal, 1)
 	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
+	// SIGHUPチャネル用のチャネルを1つのみ作成する
 	hupChan := make(chan os.Signal, 1)
 	signal.Notify(hupChan, syscall.SIGHUP)
 
 	dataExporters := []DataExporter{}
 
+	// Kafkaが設定で有効になっている場合には、exporter先としてkafka接続オブジェクトを登録します
 	if config.KafkaConfig.Enable && c != nil {
 		dataExporters = append(dataExporters, c)
 	}
 
+	// InfluxDBが設定で無効になっていない場合には、exporter先としてInfluxDBを接続オブジェクトを登録します
 	if !config.DisableInflux {
 		influx := InfluxClient{}
 		dataExporters = append(dataExporters, influx)
@@ -291,7 +299,7 @@ func main() {
 
 	for {
 		select {
-		// HUPシグナルを受信すると設定の際読み込みを行い、タイマー再セットを行う (トリガーはシグナル受信時)
+		// hupChan(登録シグナル: SIGINIT, SIGTERM, SIGQUIT)を受信した場合の操作: 設定ファイルの再読み込みとタイマーの再設定を行う
 		case <-hupChan:
 			info("HUP Received - reloading config")
 			newConfig, err := loadStartupConfig(*configFile, config)
@@ -301,7 +309,7 @@ func main() {
 				config = newConfig
 				tickers = setTimers(config)
 			}
-		// TERMシグナルを受信するとデータを吐き出し、シャットダウンを行う
+		// termChan(登録シグナル: SIGTERM)を受信した場合の操作: 収集・集計したがまだ送信されていないデータをInfluxDBやKafkaに送信した後にプロセスを終了する
 		case <-termChan:
 			info("Shutdown Request Received - Sending stored metrics then quitting")
 			for _, val := range Bps {
@@ -311,8 +319,8 @@ func main() {
 			}
 			startShutdown(c)
 			os.Exit(0)
-		// 登録されたデータを外部にExportして、バッチポイントを削除する。これは、10秒毎の定期集計や日時集計で登録されたバッチポイントがある。
-		// デフォルトで30秒毎にタイマー実行される
+		// tickers.Pollにより10秒(default)間隔で定常的に取得したデータとtickers.DailySummaryにより日時集計されたデータをInfluxDBやKafkaにExportしてから、
+		// Export完了したデータについてを削除する。デフォルトで30秒毎にタイマー実行される
 		case <-tickers.Publish:
 			for key, val := range Bps {
 				for _, dataExporter := range dataExporters {
@@ -327,6 +335,7 @@ func main() {
 			go getToData(config, false, configChan)
 		// 定常的にメトリクスの取得を行う。デフォルト10秒ごと
 		case <-tickers.Poll:
+			// ヘルスチェックURL毎にイテレーションする
 			for cdnName, urls := range runningConfig.HealthUrls {
 				for _, u := range urls {
 					debug(cdnName, " -> ", u)
@@ -415,6 +424,7 @@ func newKakfaCluster(config KafkaConfig) *KafkaCluster {
 		return nil
 	}
 
+	// カンマ区切りとなっているKafka brokerの設定を取得します。
 	brokers := strings.Split(config.Brokers, ",")
 	sc := sarama.NewConfig()
 
@@ -479,10 +489,19 @@ func publishToKafka(config StartupConfig, bps influx.BatchPoints, c *KafkaCluste
 	return nil
 }
 
+// traffic_statsに必要なタイマー実行の制御を行う
 func setTimers(config StartupConfig) Timers {
 	var timers Timers
 
+	// (time.NewTimer).Cによりタイマー受信のチャネル受信するまでwaitする
+	// TODO: これは何?
 	<-time.NewTimer(time.Now().Truncate(time.Duration(config.PollingInterval) * time.Second).Add(time.Duration(config.PollingInterval) * time.Second).Sub(time.Now())).C
+
+	// それぞれのトリガー毎にタイマーを指定する。それぞれは以下の通り
+	//   Poll: 定常的に統計エンドポイントにアクセスする
+	//   DailySummary: 日時集計を行うタイマーを指定する(実際の処理が実行されるのは日を跨いだ場合だけ)
+	//   Publish: 定常集計、日時集計により集められたデータをInfluxDBやKafkaへと送信する
+	//   Config:  TrafficOps WebAPIにアクセスして監視対象のcache serverを取得する
 	timers.Poll = time.Tick(time.Duration(config.PollingInterval) * time.Second)
 	timers.DailySummary = time.Tick(time.Duration(config.DailySummaryPollingInterval) * time.Second)
 	timers.Publish = time.Tick(time.Duration(config.PublishingInterval) * time.Second)
@@ -492,18 +511,19 @@ func setTimers(config StartupConfig) Timers {
 }
 
 func loadStartupConfig(configFile string, oldConfig StartupConfig) (StartupConfig, error) {
+
 	var config StartupConfig
 
+	// 指定されたファイルがopenできるかどうかのチェック
 	file, err := os.Open(configFile)
-
 	if err != nil {
 		return config, err
 	}
 
+	// 疑問: json.Unmarshalとjson.NewDecoderどっち使えばいいのか?  -> cf. https://qiita.com/Coolucky/items/44f2bc6e32ca8e9baa96
+	// Json設定ファイルのデコード処理を行う
 	decoder := json.NewDecoder(file)
-
 	err = decoder.Decode(&config)
-
 	if err != nil {
 		return config, err
 	}
@@ -513,15 +533,19 @@ func loadStartupConfig(configFile string, oldConfig StartupConfig) (StartupConfi
 	if config.PollingInterval == 0 {
 		config.PollingInterval = defaultPollingInterval
 	}
+
 	if config.DailySummaryPollingInterval == 0 {
 		config.DailySummaryPollingInterval = defaultDailySummaryPollingInterval
 	}
+
 	if config.PublishingInterval == 0 {
 		config.PublishingInterval = defaultPublishingInterval
 	}
+
 	if config.ConfigInterval == 0 {
 		config.ConfigInterval = defaultConfigInterval
 	}
+
 	if config.MaxPublishSize == 0 {
 		config.MaxPublishSize = defaultMaxPublishSize
 	}
@@ -555,6 +579,7 @@ func loadStartupConfig(configFile string, oldConfig StartupConfig) (StartupConfi
 	if len(config.InfluxURLs) == 0 {
 		return config, fmt.Errorf("No InfluxDB urls provided in influxUrls, please provide at least one valid URL.  e.g. \"influxUrls\": [\"http://localhost:8086\"]")
 	}
+
 	for _, u := range config.InfluxURLs {
 		influxDBProps := InfluxDBProps{
 			URL: u,
@@ -744,7 +769,10 @@ func writeSummaryStats(config StartupConfig, statsSummary tc.StatsSummary) {
 }
 
 func getToData(config StartupConfig, init bool, configChan chan RunningConfig) {
+
 	var runningConfig RunningConfig
+
+	// 下記のclientはv3-clientのライブラリが呼ばれます(v4-clientではない)
 	to, _, err := client.LoginWithAgent(config.ToURL, config.ToUser, config.ToPasswd, true, UserAgent, false, TrafficOpsRequestTimeout)
 	if err != nil {
 		msg := fmt.Sprintf("Error logging in to %v: %v", config.ToURL, err)
@@ -1032,11 +1060,13 @@ func calcCacheValues(trafmonData []byte, cdnName string, sampleTime int64, cache
 }
 
 func getURL(url string) ([]byte, error) {
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -1092,6 +1122,8 @@ func influxConnect(config StartupConfig) (influx.Client, error) {
 }
 
 func sendMetrics(config StartupConfig, bps influx.BatchPoints, retry bool) {
+
+	// InfluxDBへと接続する
 	influxClient, err := influxConnect(config)
 	if err != nil {
 		if retry {
@@ -1102,25 +1134,33 @@ func sendMetrics(config StartupConfig, bps influx.BatchPoints, retry bool) {
 	}
 
 	pts := bps.Points()
+
+	// exportするべきデータが1件以上でも登録されていたら処理を実施する
 	for len(pts) > 0 {
+
 		chunkBps, err := influx.NewBatchPoints(influx.BatchPointsConfig{
 			Database:        bps.Database(),
 			Precision:       bps.Precision(),
 			RetentionPolicy: bps.RetentionPolicy(),
 		})
+
 		if err != nil {
+			// 書き込めなかった場合にはconfig.BpsChanチャネルに送信することにより、再度書き込みを実行させます。
 			if retry {
 				config.BpsChan <- chunkBps
 			}
 			errorf("sending metrics to InfluxDB: error creating new batch points: %v", err)
 		}
+
 		for _, p := range pts[:intMin(config.MaxPublishSize, len(pts))] {
 			chunkBps.AddPoint(p)
 		}
 		pts = pts[intMin(config.MaxPublishSize, len(pts)):]
 
+		// InfluxDBへの書き込みを行います。
 		err = influxClient.Write(chunkBps)
 		if err != nil {
+			// 書き込めなかった場合にはconfig.BpsChanチャネルに送信することにより、再度書き込みを実行させます。
 			if retry {
 				config.BpsChan <- chunkBps
 			}
