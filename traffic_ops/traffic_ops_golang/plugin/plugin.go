@@ -40,6 +40,7 @@ func List() []string {
 
 // appCfg.Pluginsに設定された有効なプラグイン情報を取得する
 func Get(appCfg config.Config) Plugins {
+
 	log.Infof("plugin.Get given: %+v\n", appCfg.Plugins)
 
 	// appCfg.Pluginsに指定されたプラグインのうち、実際に有効なプラグインを取得する(ソートもされる)
@@ -52,6 +53,7 @@ func Get(appCfg config.Config) Plugins {
 
 	ctx := map[string]*interface{}{}
 	return plugins{slice: pluginSlice, cfg: pluginCfg, ctx: ctx}
+
 }
 
 func getEnabled(enabled []string) pluginsSlice {
@@ -194,16 +196,25 @@ func (p pluginsSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 var initPlugins = pluginsSlice{}
 
 func (ps plugins) OnStartup(d StartupData) {
-	//プラグイン毎にイテレーションする
+
+	// プラグイン毎にイテレーションする
+	// ps.sliceはmainでの「plugins := plugin.Get(cfg)」の結果で渡されてきたプラグインのスライスを表します。
 	for _, p := range ps.slice {
 		ictx := interface{}(nil)
 		ps.ctx[p.info.Name] = &ictx
+
+		// onStartupが登録されていない場合にはその後のOnStartupのハンドラ実行を行いません。
 		if p.funcs.onStartup == nil {
 			continue
 		}
+
 		d.Ctx = ps.ctx[p.info.Name]
 		d.Cfg = ps.cfg[p.info.Name]
-		p.funcs.onStartup(d)   // AddPluginのプラグイン関数設定時にonStartupの値は自動的に決まる。
+
+		// ここが主要な処理、OnStartupとして渡されたハンドラを実行する
+		// ここでのonStartupが実行する具体的な関数は「AddPlugin」関数を実行時に指定する際に指定されている(「AddPlugin」でgrepして調べると良い)
+		p.funcs.onStartup(d)   // AddPluginのプラグイン関数設定時にonStartupの値も明示的に指定しているのでそこでonStartupの関数ハンドラが決定する
+
 	}
 }
 

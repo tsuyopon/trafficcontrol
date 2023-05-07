@@ -18,6 +18,8 @@
  */
 
 
+// ファイルの変更を検知したら、ブラウザで読み直す仕組みのようです
+//   cf. https://ledsun.hatenablog.com/entry/2013/11/28/181035
 module.exports = {
     options: {
         livereload: true

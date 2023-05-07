@@ -22,6 +22,8 @@
 module.exports = function (grunt) {
 
     var os = require("os");
+
+    // grunt/globalConfig.js を読み込みます。これが設定ファイルとして利用されています
     var globalConfig = require('./grunt/globalConfig');
 
     // load time grunt - helps with optimizing build times
@@ -36,6 +38,13 @@ module.exports = function (grunt) {
     // default task - when you type 'grunt' it really runs as 'grunt dev'
     grunt.registerTask('default', ['dev']);
 
+
+    /*
+     * (重要) grunt.registerTaskの第2引数に記載している「build-dev」「express」「watch」などは以下の1, 2のいずれかに一致する。
+     *  - 1. grunt.registerTaskとして登録されているもの(build-devなどは別の箇所で定義されている)
+     *  - 2.「express:dev」「watch」などは1のように定義されていないので、この場合にはgruntディレクトリ配下に.jsのsuffixを付与した同名のファイルとして存在する。つまり、grunt/express.jsやgrunt/watch.jsに存在する。
+     *
+     */
     // dev task - when you type 'grunt dev' <-- builds unminified app and puts it in in app/dist folder and starts express server which reads server.js
     grunt.registerTask('dev', [
         'build-dev',
@@ -44,12 +53,14 @@ module.exports = function (grunt) {
     ]);
 
     // dist task - when you type 'grunt dist' <-- builds minified app for distribution and generates node dependencies all wrapped up nicely in app/dist folder
+    // Dockerfileのbuildの中で「grunt dist」が呼ばれる。つまり、これがgruntに関する起点となるメイン処理と思われる
     grunt.registerTask('dist', [
         'build',
         'install-dependencies'
     ]);
 
     // build tasks
+    // 「grunt dist」からこのbuildが呼ばれる
     grunt.registerTask('build', [
         'clean',
         'copy:dist',
@@ -69,6 +80,7 @@ module.exports = function (grunt) {
     ]);
 
     // css
+    // 「./grunt/dart-sass.js」ファイルがあり、その中にprodやdevとあるのでそれらに適用されるものと思われる
     grunt.registerTask('build-css', [
         'dart-sass:prod'
     ]);
@@ -91,6 +103,7 @@ module.exports = function (grunt) {
     ]);
 
     // js (libraries)
+    // 「grunt/browserify.js」ファイルにshared-libs-prodについて記載があるので、それに適用されるものと思われる
     grunt.registerTask('build-shared-libs', [
         'browserify:shared-libs-prod'
     ]);

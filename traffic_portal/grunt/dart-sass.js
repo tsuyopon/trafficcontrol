@@ -18,6 +18,7 @@
  */
 
 
+// see: https://qiita.com/sakamotoyuya/items/ae55d8d6cf464b84c9cd#grunt%E3%81%AE%E5%B0%8E%E5%85%A5
 module.exports = {
     options: {
         includePaths: [

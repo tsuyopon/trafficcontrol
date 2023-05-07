@@ -164,7 +164,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// SSLが必要かどうかを設定値から判定する
+	// SSLが必要かどうかを設定値から判定する。ここでsslStrに含まれる"require"や"disable"の文字列はpostgresへの接続時の情報として付与するための文字列が入ることになります
 	sslStr := "require"
 	if !cfg.DB.SSL {
 		sslStr = "disable"
@@ -193,6 +193,7 @@ func main() {
 	trafficVault := setupTrafficVault(*riakConfigFileName, &cfg)
 
 	// cdn.confに指定された有効なプラグイン情報のオブジェクト情報を取得する。(cdn.confに指定された「plugin」、「plugin_config」の設定を参照する)
+	// traffic_opsのプラグインというのは「"${TO_DIR}/traffic_ops_golang/plugin/"*.go」に配置されたプラグインで、その中でAddPluginすることによって特定のプラグイン処理を読み込む(詳細はサンプルがあるのでそちらを参考にするとよさそう)
 	plugins := plugin.Get(cfg)
 
 	// 設定: profiling_enabledを取得する
@@ -318,6 +319,7 @@ func main() {
 
 	// 次のsignalReload()に引き渡すための無名関数の定義を行う
 	reloadProfilingAndBackendConfig := func() {
+
 		setNewProfilingInfo(*configFileName, &profiling, &profilingLocation, cfg.Version)
 
 		// 指定されたbackend設定ファイルを構造体に変換して、セットする
@@ -372,16 +374,19 @@ func setupTrafficVault(riakConfigFileName string, cfg *config.Config) trafficvau
 
 	// traffic_vault_backend == "riak" でかつ RiakPortが指定されている場合。つまり、Riakに関連する処理
 	if trafficVaultBackend == riaksvc.RiakBackendName && cfg.RiakPort != nil {
+
 		// inject riak_port into traffic_vault_config.port if unset there
 		log.Warnln("using deprecated field 'riak_port', use 'port' field in traffic_vault_config instead")
 		tmp := make(map[string]interface{})
 		err := json.Unmarshal(trafficVaultConfigBytes, &tmp)
 
+		// 構造体への変換に失敗したら
 		if err != nil {
 			log.Errorf("failed to unmarshal riak config: %s", err.Error())
 			os.Exit(1)
 		}
 
+		// 取得した設定にportが含まれていない場合
 		if _, ok := tmp["port"]; !ok {
 			tmp["port"] = *cfg.RiakPort
 		}
