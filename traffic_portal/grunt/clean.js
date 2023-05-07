@@ -18,10 +18,14 @@
  */
 
 
+// 指定したファイルやフォルダをcleanする
+//  see: https://www.npmjs.com/package/grunt-contrib-clean
+//  その他参考: https://ics.media/entry/9199/
+
 module.exports = {
     all: [
-        '<%= globalConfig.distdir %>/*',
-        '<%= globalConfig.tmpdir %>/*'
+        '<%= globalConfig.distdir %>/*',   // 「app/dist」ディレクトリ
+        '<%= globalConfig.tmpdir %>/*'     // 「.tmp」ディレクトリ
     ],
     options: {
         force: true
