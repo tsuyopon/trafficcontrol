@@ -60,30 +60,42 @@ func (t *UnpolledCaches) UnpolledCaches() map[tc.CacheName]bool {
 }
 
 // SetNewCaches takes a list of new caches, which may overlap with the existing caches, diffs them, removes any `unpolledCaches` which aren't in the new list, and sets the list of `polledCaches` (which is only used by this func) to the `newCaches`.
+// このSetNewCaches関数は新しいキャッシュnewCachesのリストを受け取ります。そのリストは現行のキャッシュとオーバーラップするかもしれないので、diffを取得して
 func (t *UnpolledCaches) SetNewCaches(newCaches map[tc.CacheName]bool) {
+
+	// データ更新するのでロックを取る
 	t.m.Lock()
 	defer t.m.Unlock()
+
 	for cache := range t.unpolledCaches {
+		// t.unpolledCachesに含まれるcacheがnewCachesのリスト中にも同じcacheが含まれていなければ、{}内のコードが実行される。つまり、t.unpolledCachesとt.seenCachesの該当cacheが削除される
 		if _, ok := newCaches[cache]; !ok {
 			delete(t.unpolledCaches, cache)
 			delete(t.seenCaches, cache)
 		}
 	}
+
 	for cache := range t.allCaches {
+		// t.allCachesに含まれるcacheがnewCachesのリスト中にも同じcacheが含まれていなければ、{}内のコードが実行される。つまり、t.allCachesから対象のサーバ(cache)が削除される。
 		if _, ok := newCaches[cache]; !ok {
 			delete(t.allCaches, cache)
 		}
 	}
+
 	for cache, v := range newCaches {
+		// newCachesリスト中に含まれるcacheがt.allCache中に含まれていなければ、t.unpolledCaches[cache]とt.allCaches[cache]に値をセットする
 		if _, ok := t.allCaches[cache]; !ok {
 			t.unpolledCaches[cache] = v
 			t.allCaches[cache] = v
 		}
 	}
+
+	// 以上により初期化が完了したのでUnpolledCaches構造体のinitializeの値にtrueを格納しておく
 	*t.initialized = true
 }
 
 // Any returns whether there are any caches marked as not polled. Also returns true if SetNewCaches() has never been called (assuming there exist caches, if this hasn't been initialized, we couldn't have polled any of them).
+// 初期化されていない(SetNewCaches()が呼ばれていない)場合にはtrueを返します
 func (t *UnpolledCaches) Any() bool {
 	t.m.RLock()
 	defer t.m.RUnlock()

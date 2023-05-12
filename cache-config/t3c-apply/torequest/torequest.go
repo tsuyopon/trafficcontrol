@@ -952,6 +952,7 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 // and determines which need to be installed or removed on the cache.
 func (r *TrafficOpsReq) ProcessPackages() error {
 	log.Infoln("Calling ProcessPackages")
+
 	// get the package list for this cache from Traffic Ops. 
 	// t3c-request --get-data=packagesの実行してTrafficOpsからこのサーバで取得するパッケージリストを取得する
 	pkgs, err := getPackages(r.Cfg)

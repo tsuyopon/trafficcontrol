@@ -547,7 +547,7 @@ func (s TrafficOpsSessionThreadsafe) trafficMonitorConfigMapRaw(cdn string) (*tc
 
 	// TrafficOps APIからの取得がエラーではない場合
 	if err == nil {
-		// 「/cdns/<cdn>/configs/monitoring」(GET)から正常に値を取得することができた場合
+		// 「/cdns/<cdn>/configs/monitoring」(GET)から正常に値を取得することができた場合。このログはdocker-compose logsでも定常的に表示される
 		log.Infoln("successfully got Traffic Monitor config from Traffic Ops")
 		if config == nil {
 			return nil, fmt.Errorf("nil Traffic Monitor config after successful fetch")

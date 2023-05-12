@@ -72,6 +72,7 @@ func MakeDispatchMap(
 
 	// wrap composes all universal wrapper functions. Right now, it's only the UnpolledCheck, but there may be others later. For example, security headers.
 	wrap := func(f http.HandlerFunc) http.HandlerFunc {
+
 		if statPollingEnabled {
 			return wrapUnpolledCheck(statUnpolledCaches, errorCount, f)
 		} else {
@@ -318,14 +319,17 @@ func accessLogStr(
 
 // WrapUnpolledCheck wraps an http.HandlerFunc, returning ServiceUnavailable if all caches have't been polled; else, calling the wrapped func. Once all caches have been polled, we never return a 503 again, even if the CRConfig has been changed and new, unpolled caches exist. This is because, before those new caches existed in the CRConfig, they weren't being routed to, so it doesn't break anything to continue not routing to them until they're polled, while still serving polled caches as available. Whereas, on startup, if we were to return data with some caches unpolled, we would be telling clients that existing, potentially-available caches are unavailable, simply because we hadn't polled them yet.
 func wrapUnpolledCheck(unpolledCaches threadsafe.UnpolledCaches, errorCount threadsafe.Uint, f http.HandlerFunc) http.HandlerFunc {
+
 	polledAll := false
 	polledLocal := false
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		iw := &util.Interceptor{W: w}
 		defer func() {
 			log.Accessln(accessLogStr(time.Now(), r.RemoteAddr, r.Method, r.URL.Path, r.URL.RawQuery, iw.Code, iw.ByteCount, int(time.Now().Sub(start)/time.Millisecond), r.UserAgent()))
 		}()
+
 		if !polledAll || !polledLocal {
 			polledAll = !unpolledCaches.Any()
 			polledLocal = !unpolledCaches.AnyDirectlyPolled()
@@ -340,6 +344,7 @@ func wrapUnpolledCheck(unpolledCaches threadsafe.UnpolledCaches, errorCount thre
 		iw.Header().Set(rfc.PermissionsPolicy, "interest-cohort=()")
 		f(iw, r)
 	}
+
 }
 
 func stripAllWhitespace(s string) string {

@@ -18,7 +18,7 @@
  */
 
 
-// AngularJSテンプレートをJavaScriptへと変換してくれる仕組み
+// AngularJSテンプレートをJavaScriptへと変換してくれる仕組みです。AngularJSに特化しています。
 // 
 // grunt-html2jsの使い方
 //   see: https://github.com/rquadling/grunt-html2js
@@ -45,7 +45,7 @@ module.exports = {
 // 参考 
 //
 // html2jsによりtpl.htmlがどのようにJSへと変換されるのでしょうか?
-// (snip)の部分は検知された大量のテンプレートを表していて、下記サンプルでは、app.templatesに登録される「common/directives/treeSelect/tree.select.tpl.html」と「modules/public/public.tpl.html」のみを表示しています。
+// (snip)の部分は検知された大量のテンプレートを表していて、下記サンプルでは、上記のdist.moduleに指定された「app.templates」に登録される「common/directives/treeSelect/tree.select.tpl.html」と「modules/public/public.tpl.html」のみを表示しています。
 /*
  * 
  * angular.module("app.templates", ["common/directives/treeSelect/tree.select.tpl.html", (snip), "modules/public/public.tpl.html"]);
