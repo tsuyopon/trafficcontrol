@@ -90,6 +90,8 @@ func NewSession(user, password, url, userAgent string, client *http.Client, useC
 // the error is not nil, the remote address may or may not be nil, depending on
 // whether the error occurred before the login request.
 func LoginWithAgent(toURL string, toUser string, toPasswd string, insecure bool, userAgent string, useCache bool, requestTimeout time.Duration) (*Session, net.Addr, error) {
+
+	// 下記でapiVersions()は4.0を応答する
 	cl, ip, err := toclientlib.LoginWithAgent(toURL, toUser, toPasswd, insecure, userAgent, requestTimeout, apiVersions())
 	if err != nil {
 		return nil, nil, err

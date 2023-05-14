@@ -789,6 +789,7 @@ func enrollProfile(toSession *session, r io.Reader) error {
 // 「/shared/enroller/servers/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServer(toSession *session, r io.Reader) error {
 
+	// JSONをデコードする
 	dec := json.NewDecoder(r)
 	var s tc.ServerV40
 	err := dec.Decode(&s)
@@ -805,7 +806,7 @@ func enrollServer(toSession *session, r io.Reader) error {
 	}
 
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
+	enc.SetIndent("", "  ")  // 半角スペース2つをインデントに使用する
 	err = enc.Encode(&alerts)
 
 	return err
@@ -1001,6 +1002,7 @@ func createFederationResolversOfType(toSession *session, resolverTypeName tc.Fed
 }
 
 // enrollServerServerCapability takes a json file and creates a ServerServerCapability object using the TO API
+// 「/shared/enroller/server_server_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServerServerCapability(toSession *session, r io.Reader) error {
 
 	dec := json.NewDecoder(r)
@@ -1049,7 +1051,7 @@ func enrollServerServerCapability(toSession *session, r io.Reader) error {
 }
 
 type dirWatcher struct {
-	*fsnotify.Watcher
+	*fsnotify.Watcher   // TODO: これにはなぜ型がないのか?
 	TOSession *session
 	watched   map[string]func(toSession *session, fn string) error
 }
@@ -1061,7 +1063,7 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 	var err error
 	var dw dirWatcher
 
-	// fsnotify.NewWatcherはファイル変更を検知する為の仕組みです。
+	// fsnotify.NewWatcherはファイル変更を検知する為の仕組みです。下記でwatcherを起動しています
 	// https://qiita.com/cotrpepe/items/3877a8d803f45c6f1171#events
 	dw.Watcher, err = fsnotify.NewWatcher()
 	if err != nil {
@@ -1220,12 +1222,17 @@ func (dw *dirWatcher) watch(watchdir, t string, f func(*session, io.Reader) erro
 func startWatching(watchDir string, toSession *session, dispatcher map[string]func(*session, io.Reader) error) (*dirWatcher, error) {
 
 	// watch for file creation in directories
+	// watcherの起動を行います。なお、fsnotifyのチャネル受信については下記でgoroutineが起動しています
 	dw, err := newDirWatcher(toSession)
+
+	// watcher起動に成功したら
 	if err == nil {
+		// dispatchで定義されたそれぞれのエンドポイント「/shared/enroller/<name>/」にファイルが追加されたら、それぞれのハンドラを実行するように登録しています
 		for d, f := range dispatcher {
 			dw.watch(watchDir, d, f)
 		}
 	}
+
 	return dw, err
 }
 

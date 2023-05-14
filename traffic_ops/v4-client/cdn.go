@@ -44,6 +44,8 @@ func (to *Session) UpdateCDN(id int, cdn tc.CDN, opts RequestOptions) (tc.Alerts
 // GetCDNs retrieves CDNs from Traffic Ops.
 func (to *Session) GetCDNs(opts RequestOptions) (tc.CDNsResponse, toclientlib.ReqInf, error) {
 	var data tc.CDNsResponse
+
+	// GET /api/4.0/cdns
 	reqInf, err := to.get(apiCDNs, opts, &data)
 	return data, reqInf, err
 }

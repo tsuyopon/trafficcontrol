@@ -40,7 +40,9 @@ tar -xzvf $RPM_SOURCE_DIR/traffic_portal-%{version}.tgz
 %setup
 
 %build
+		# npm installによってpackage.jsonに記載したパッケージをnode_modules配下にインストールします
 		npm install
+		# 「grunt dist」によってgrunt設定ファイルGruntfile.js中に定義されるdistタスクを実施する。これによって、静的ファイルが生成されます
 		grunt dist
 
 %install
