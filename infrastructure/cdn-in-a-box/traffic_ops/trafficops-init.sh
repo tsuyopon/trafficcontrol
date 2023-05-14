@@ -44,23 +44,35 @@ endpoints="cdns types divisions regions phys_locations tenants users cachegroups
 vars=$(awk -F = '/^\w/ {printf "$%s ",$1}' /variables.env)
 
 waitfor() {
+
+    # 第1引数
     local endpoint="$1"; shift
+
+    # 第2引数
     local field="$1"; shift
+
+    # 第3引数
     local value="$1"; shift
+
+    # 第4引数 (リクエスト元を見ると第４引数は指定されない場合もある)
     local responseField="$1"
 
     if [[ -z "$responseField" ]]; then
+      # 第4引数が渡されない場合には、第２引数の値をresponseFieldとして上書きする
       responseField="$field"
     else
+      # 第4引数が渡された場合にはshiftする
       shift
     fi
 
+    # 手前の分岐でshiftが実行されたかどうかで第４引数か、第５引数を取得するのかが変わってくる
     local additionalQueryString="$1"
     if [[ -n "$additionalQueryString" ]]; then
       shift
     fi
 
     while true; do
+        # TO_API_VERSIONは明示的に指定されない限りto-access.shにいおいて3.0になる。
         v="$(to-get "api/${TO_API_VERSION}/${endpoint}?${field}=${value}${additionalQueryString}" | jq -r --arg field "$responseField" '.response[][$field]')";
         if [[ "$v" == "$value" ]]; then
           break
@@ -68,6 +80,7 @@ waitfor() {
         echo "waiting for $endpoint $field=$value"
         sleep 3
     done
+
 }
 
 # special cases -- any data type requiring specific data to already be available in TO should have an entry here.
@@ -159,6 +172,10 @@ load_data_from() {
 
         # 「/trafffic_ops_data/$d/*.json」があるかのを抽出して、ファイル毎に処理を行なっています
         for f in $(find "$d" -name "*.json" -type f); do
+            # 上記の$fにはファイル名だけではなく、ディレクトリも一部含まれていることに注意すること
+            # (fileの実行サンプル)
+            #   $ find federations -name "*.json" -type f
+            #   federations/010-foo.kabletown.net.json
             echo "Loading $f"
 
             # *.jsonで見つかったファイル形式がfileではなかったらcontinueする
@@ -171,13 +188,16 @@ load_data_from() {
             delayfor "$f"
 
             # envsubstコマンドに「/trafffic_ops_data/$d/*.json」を標準入力として与えて、
-            # envsubstコマンドには引数として$varsで指定された文字列のみを置換するように指示する。その後「$ENROLLER_DIR/$f」へと書き出す。
+            # envsubstコマンドには引数として$varsで指定された文字列のみを置換するように指示する。その後「$ENROLLER_DIR/$f」(/shared/enroller/$f)へと書き出す ($fには一部ディレクトリ情報も含まれることに注意すること)
+            #
+            # (重要) TrafficOps側でここで書き込みされたこの情報を元にしてenroller側ではファイルを検知して、TrafficOpsのAPIに初期登録作業が行われることになる。
             envsubst "$vars" <"$f"  > "$ENROLLER_DIR/$f"
 
             # 上記でtraffic_ops_data中に書き込んだ後なので、ボリュームの同期を行なわせる($ENROLLER_DIRは他のコンポーネントでもmountしているため)
             sync
 
         done
+
     done
 
     # $statusが変わっていなければOK。変わっていたら処理を終了させる
@@ -208,13 +228,17 @@ traffic_router_zonemanager_timeout() {
   mv "$modified_crconfig" $crconfig_path;
 }
 
+# /shared/SKIP_TRAFFIC_OPS_DATAが配置される場合には/shared/enroller配下に/traffic_ops_dataのファイルは配置されないので、基本的な初期設定情報は同期されない。
+# デフォルトでは/shared/SKIP_TRAFFIC_OPS_DATAは存在しない方のコードパスが実行される
 if [[ ! -e /shared/SKIP_TRAFFIC_OPS_DATA ]]; then
 	traffic_router_zonemanager_timeout
 
 	# Load required data at the top level
+    # ここでは/traffic_ops_dataのファイル内容を一部envsubstで置換の上で/shared/enrollerに配置している。つまり、ここを起点にenrollerのファイル検知処理が動き出す。」
 	# この/traffic_ops_dataにあるファイルの実態は、infrastructure/cdn-in-a-box/traffic_ops_dataからコピーされたファイルが存在している
 	load_data_from /traffic_ops_data
 
 else
+
 	touch "$ENROLLER_DIR/initial-load-done"
 fi

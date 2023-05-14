@@ -90,7 +90,12 @@ public final class NameServerMain {
     /**
      * @param args
      */
+
+    // 下記がtraffic_routerの起点として呼び出されるはず。
     public static void main(final String[] args) {
+
+        // 「traffic_router/core/src/main/resources/dns-traffic-router.xml」には「classpath:/applicationContext.xml」がimportされる記述があります。
+        // つまり、「traffic_router/core/src/main/webapp/WEB-INF/applicationContext.xml」が呼ばれると想定されます。
         try (ClassPathXmlApplicationContext ctx = new ClassPathXmlApplicationContext("/dns-traffic-router.xml")) {
             ctx.getBean("NameServerMain");
             LOGGER.info("PROCESS_SUCCEEDED");

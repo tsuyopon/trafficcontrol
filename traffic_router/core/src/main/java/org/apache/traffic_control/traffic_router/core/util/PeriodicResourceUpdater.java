@@ -52,6 +52,7 @@ import static org.apache.commons.codec.digest.DigestUtils.md5Hex;
  *
  */
 public class PeriodicResourceUpdater {
+
 	private static final Logger LOGGER = LogManager.getLogger(PeriodicResourceUpdater.class);
 
 	private AsyncHttpClient asyncHttpClient;

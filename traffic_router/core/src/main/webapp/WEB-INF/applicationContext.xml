@@ -22,6 +22,7 @@
 
 	<import resource="classpath:/applicationProperties.xml" />
 
+	<!-- ここで COMPONENT SCANされている -->
 	<context:component-scan base-package="org.apache.traffic_control.traffic_router" >
 		<context:exclude-filter type="regex" expression="org\.apache\.traffic_control\.traffic_router\.api.*"/>
 	</context:component-scan>

@@ -24,22 +24,32 @@ import (
 	"os"
 )
 
+// 設定に関する情報を格納する構造体
 type ConfigFile struct {
+	// ファイル名
 	Filename       string
+
+	// 前回更新時刻が保存される
 	LastModifyTime int64
 }
 
 // get the file modification times for a configuration file.
+// ファイルの前回更新時刻を取得する
 func GetFileModificationTime(fn string) (int64, error) {
+
 	f, err := os.Open(fn)
 	if err != nil {
 		return 0, errors.New("opening " + fn + ": " + err.Error())
 	}
 	defer f.Close()
 
+	// fileのstatを取得する
 	finfo, err := f.Stat()
 	if err != nil {
 		return 0, errors.New("unable to get file status for " + fn + ": " + err.Error())
 	}
+
+	// 前回の変更時刻を取得する
 	return finfo.ModTime().UnixNano(), nil
+
 }
