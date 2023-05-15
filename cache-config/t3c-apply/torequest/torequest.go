@@ -254,7 +254,8 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 	cfg.ChangeNeeded = changeNeeded
 	cfg.AuditComplete = true
 
-	// ファイル名が50-ats.rulesの場合にだけはr.processUdevRulesを実行する。
+	// ファイル名が50-ats.rulesの場合にだけはr.processUdevRulesを実行する。(歴史的経緯により存在しているらしく、通常は気にする必要はないらしい)
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/overview/profiles_and_parameters.html#ats-rules
 	if cfg.Name == "50-ats.rules" {
 		err := r.processUdevRules(cfg)
 		if err != nil {
@@ -1236,6 +1237,7 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 		return nil // we restarted, so no need to reload
 
 	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagReload { // 「--service-action=reload」が指定された場合
+
 		if serviceNeeds == t3cutil.ServiceNeedsRestart {
 			// reload(--service-action=reload)オプションが指定しているにもかかわらず、サービスとしてはrestartを必要とする場合にはエラーログを吐いておく
 

@@ -53,6 +53,7 @@ func newSession(reqTimeout time.Duration, toURL string, toUser string, toPass st
 }
 
 func (s session) getParameter(m tc.Parameter, header http.Header) (tc.Parameter, error) {
+
 	// TODO: s.GetParameterByxxx() does not seem to work with values with spaces --
 	// doing this the hard way for now
 	opts := client.RequestOptions{Header: header}
@@ -263,6 +264,7 @@ func enrollDeliveryService(toSession *session, r io.Reader) error {
 // 「/shared/enroller/deliveryservices_required_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollDeliveryServicesRequiredCapability(toSession *session, r io.Reader) error {
 
+	// jsonデコードする。jsonの内容はDeliveryServicesRequiredCapability構造体としてdsrc(Delivery SeRviCe)にマッピングされる
 	dec := json.NewDecoder(r)
 	var dsrc tc.DeliveryServicesRequiredCapability
 	err := dec.Decode(&dsrc)
@@ -271,30 +273,43 @@ func enrollDeliveryServicesRequiredCapability(toSession *session, r io.Reader) e
 		return err
 	}
 
+	// JSON中にDeliveryServiceのXMLIDが存在しなければエラー
 	if dsrc.XMLID == nil {
 		return errors.New("required capability had no XMLID")
 	}
 
+	// リクエストにxmlIdを指定する
 	opts := client.NewRequestOptions()
 	opts.QueryParameters.Set("xmlId", *dsrc.XMLID)
+
+	// /api/4.0/deliveryservices?xmlId=<xmlId> (GET) 
+	// https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/deliveryservices.html#get
 	dses, _, err := toSession.GetDeliveryServices(opts)
 	if err != nil {
 		log.Infof("getting Delivery Service by XMLID %s: %s", *dsrc.XMLID, err.Error())
 		return err
 	}
+
+	// $.responseに1件もなければエラー
 	if len(dses.Response) < 1 {
 		err = fmt.Errorf("could not find a Delivey Service with XMLID %s", *dsrc.XMLID)
 		log.Infoln(err)
 		return err
 	}
+
+	// リクエスト時に指定したxmlId=<xmlId>に対応するDeliveryServiceのIDを取得する
 	dsrc.DeliveryServiceID = dses.Response[0].ID
 
+	// DeliveryService IDに対応する必須のcapabilityを設定する。
+	// /api/4.0/deliveryservices_required_capabilities (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/deliveryservices_required_capabilities.html#post
 	alerts, _, err := toSession.CreateDeliveryServicesRequiredCapability(dsrc, client.RequestOptions{})
 	if err != nil {
 		log.Infof("error creating Delivery Services Required Capability: %v", err)
 		return err
 	}
 
+	// 標準出力をそのままjson形式にして、半角スペース2つをindentとしてセットしてreturn
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	err = enc.Encode(&alerts)
@@ -654,14 +669,17 @@ func enrollUser(toSession *session, r io.Reader) error {
 // 「/shared/enroller/profiles/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollProfile(toSession *session, r io.Reader) error {
 
+	// JSONデコード
 	dec := json.NewDecoder(r)
 	var profile tc.Profile
 
+	// JSONオブジェクトをProfile構造体のprofileにマッピングする
 	err := dec.Decode(&profile)
 	if err != nil {
 		log.Infof("error decoding Profile: %s\n", err)
 		return err
 	}
+
 	// get a copy of the parameters
 	parameters := profile.Parameters
 
@@ -674,6 +692,7 @@ func enrollProfile(toSession *session, r io.Reader) error {
 		return errors.New("missing name on profile")
 	}
 
+	// /api/4.0/profiles?name=<profile.Name> (GET)から取得する
 	opts := client.NewRequestOptions()
 	opts.QueryParameters.Set("name", profile.Name)
 	profiles, _, err := toSession.GetProfiles(opts)
@@ -681,8 +700,10 @@ func enrollProfile(toSession *session, r io.Reader) error {
 	createProfile := false
 	if err != nil || len(profiles.Response) == 0 {
 		// no profile by that name -- need to create it
+		// APIにname=<profile.Name>として指定したが、レスポンスの値に1件も存在しなかった場合には新規作成としてcreateProfileフラグをtrueにする
 		createProfile = true
 	} else {
+		// APIにname=<profile.Name>として指定したが、レスポンスの値に1件以上の値が存在する場合。この場合には、更新として判断する。
 		// updating - ID needs to match
 		profile = profiles.Response[0]
 	}
@@ -690,88 +711,155 @@ func enrollProfile(toSession *session, r io.Reader) error {
 	var alerts tc.Alerts
 	var action string
 	if createProfile {
+
+		// profileの新規作成が行われる
+		// /api/4.0/profiles (POST)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#post
 		alerts, _, err = toSession.CreateProfile(profile, client.RequestOptions{})
 		if err != nil {
 			found := false
 			for _, alert := range alerts.Alerts {
 				if alert.Level == tc.ErrorLevel.String() && strings.Contains(alert.Text, "already exists") {
+					// 既に登録されているが、何かしらの警告がある場合
 					found = true
 					break
 				}
 			}
+
 			if found {
 				log.Infof("profile %s already exists", profile.Name)
 			} else {
 				log.Infof("error creating profile from %+v: %v - alerts: %+v", profile, err, alerts.Alerts)
 			}
 		}
+
+		// 以下では作成したプロファイルが存在するかどうかを確認するために、profileを参照している
+		// /api/4.0/profiles?name=<profile.Name> (GET)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#get
 		profiles, _, err = toSession.GetProfiles(opts)
+
+		// APIからの取得がエラーの場合
 		if err != nil {
 			log.Infof("error getting profile ID from %+v: %v - alerts: %+v", profile, err, profiles.Alerts)
 		}
+
+		// APIから取得したがレスポンス0件の場合
 		if len(profiles.Response) == 0 {
 			err = fmt.Errorf("no results returned for getting profile ID from %+v", profile)
 			log.Infoln(err)
 			return err
 		}
+
+		// 取得したprofileを格納して、actionには作成したことを示す「creating」を登録する
 		profile = profiles.Response[0]
 		action = "creating"
+
 	} else {
+		// createProfile=falseの場合には新規作成ではなく、更新処理となる。
+		// /profiles/<id> (PUT)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles_id.html#put
 		alerts, _, err = toSession.UpdateProfile(profile.ID, profile, client.RequestOptions{})
+
+		// actionには更新したことを示す「updating」を登録する
 		action = "updating"
 	}
 
+	// 何かerrに引っ掛かったらエラーメッセージを出力して、returnする
 	if err != nil {
 		log.Infof("error "+action+" from %s: %s", err)
 		return err
 	}
 
+	// parametersは`json:params`の数によりイテレーションしている
+	//
+	// 以下、json中の一部params部分のみ抜粋
+	//	"params": [
+	//		{
+	//			"configFile": "records.config",
+	//			"name": "CONFIG proxy.config.proxy_name",
+	//			"secure": false,
+	//			"value": "STRING __HOSTNAME__"
+	//		},
+	//		{
+	//			"configFile": "records.config",
+	//			"name": "CONFIG proxy.config.config_dir",
+	//			"secure": false,
+	//			"value": "STRING /opt/trafficserver/etc/trafficserver"
+	//		},
 	for _, p := range parameters {
+
 		var name, configFile, value string
 		var secure bool
+
+		// 「configFile」を取得する
 		if p.ConfigFile != nil {
 			configFile = *p.ConfigFile
 		}
+
+		// 「name」を取得する
 		if p.Name != nil {
 			name = *p.Name
 		}
+
+		// 「value」を取得する
 		if p.Value != nil {
 			value = *p.Value
 		}
+
+		// paramにtc.Parameter構造体をセット
 		param := tc.Parameter{ConfigFile: configFile, Name: name, Value: value, Secure: secure}
+
+		// /api/4.0/parameters (GET) によりparameterを取得する
+		// https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/parameters.html#get
 		eparam, err := toSession.getParameter(param, nil)
 		if err != nil {
+
 			// create it
 			log.Infof("creating param %+v", param)
+
+			// /api/4.0/parameters (POST)
+			// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#post
 			newAlerts, _, err := toSession.CreateParameter(param, client.RequestOptions{})
 			if err != nil {
 				log.Infof("can't create parameter %+v: %s, %v", param, err, newAlerts.Alerts)
 				continue
 			}
+
+			// parameterの登録が問題ないことを /api/4.0/parameters (GET)にリクエストすることによって確認する
 			eparam, err = toSession.getParameter(param, nil)
 			if err != nil {
 				log.Infof("error getting new parameter %+v: \n", param)
 				log.Infof(err.Error())
 				continue
 			}
+
 		} else {
 			log.Infof("found param %+v\n", eparam)
 		}
 
+		// GETリクエストによって取得したprofile情報にparam IDが1つもなければcontinue
 		if eparam.ID < 1 {
 			log.Infof("param ID not found for %v", eparam)
 			continue
 		}
+
+		// GETリクエストによって取得したprofile情報にparam IDが1つもなければcontinueする
 		pp := tc.ProfileParameterCreationRequest{ProfileID: profile.ID, ParameterID: eparam.ID}
+
+		// ProfileにParameterを割り当てる
+		// /api/4.0/profileparameters (POST)
 		resp, _, err := toSession.CreateProfileParameter(pp, client.RequestOptions{})
 		if err != nil {
+			// エラーの場合
 			found := false
 			for _, alert := range resp.Alerts {
 				if alert.Level == tc.ErrorLevel.String() && strings.Contains(alert.Text, "already exists") {
+					// すでに登録されていて、何かしらのエラーが表示されてしまった場合
 					found = true
 					break
 				}
 			}
+
 			if !found {
 				log.Infof("error creating profileparameter %+v: %v - alerts: %+v", pp, err, resp.Alerts)
 			}
@@ -1005,7 +1093,10 @@ func createFederationResolversOfType(toSession *session, resolverTypeName tc.Fed
 // 「/shared/enroller/server_server_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServerServerCapability(toSession *session, r io.Reader) error {
 
+	// JSONデコード
 	dec := json.NewDecoder(r)
+
+	// JSONを構造体にマッピングします。sにマッピングされます。
 	var s tc.ServerServerCapability
 	err := dec.Decode(&s)
 	if err != nil {
@@ -1013,29 +1104,46 @@ func enrollServerServerCapability(toSession *session, r io.Reader) error {
 		log.Infoln(err)
 		return err
 	}
+
+	// s.Serverは「json:serverHostName」の値となります。この値がセットされていなければエラーになります。
 	if s.Server == nil {
 		err = errors.New("server/Capability relationship did not specify a server")
 		return err
 	}
 
+	// 「/api/4.0/servers?hostName=<s.Server> (GET)」
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/servers.html
 	resp, _, err := toSession.GetServers(client.RequestOptions{QueryParameters: url.Values{"hostName": []string{*s.Server}}})
 	if err != nil {
 		err = fmt.Errorf("getting server '%s': %v - alerts: %+v", *s.Server, err, resp.Alerts)
 		log.Infoln(err)
 		return err
 	}
+
+	// Serverが何も取得できない場合にはエラー
 	if len(resp.Response) < 1 {
 		err = fmt.Errorf("could not find Server %s", *s.Server)
 		log.Infoln(err.Error())
 		return err
 	}
+
+	// /serversエンドポイントにhostNameクエリパラメータを指定したのに複数取れるのはおかしいのでエラー
 	if len(resp.Response) > 1 {
 		err = fmt.Errorf("found more than 1 Server with hostname %s", *s.Server)
 		log.Infoln(err.Error())
 		return err
 	}
+
+	// レスポンスからサーバを識別するIDを取得する。この値は次の「/api/4.0/server_server_capabilities」へのjson中に必要な値なので取得している
 	s.ServerID = resp.Response[0].ID
 
+	// ここではサーバIDを指定してサーバへのcapabilityの登録を行う。capabilityの値として指定できる値は決まっていない(CIABだとHDDで、他にもramやdiskが指定されているケースもある)
+	// 下記のエンドポイントにリクエストが行われる
+	//  /api/4.0/server_server_capabilities(POST)
+	//  see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/server_server_capabilities.html#post
+	//
+	// なお、deliveryservices_required_capabilitiesによって、xmlIdに対してcapabilityの値を絞る設定をすることが可能である。
+	//
 	alerts, _, err := toSession.CreateServerServerCapability(s, client.RequestOptions{})
 	if err != nil {
 		err = fmt.Errorf("error creating Server Server Capability: %v - alerts: %+v", err, alerts.Alerts)
@@ -1043,8 +1151,9 @@ func enrollServerServerCapability(toSession *session, r io.Reader) error {
 		return err
 	}
 
+	// 上記APIから取得したレスポンスである標準出力をそのままjsonに加工して、レスポンスとして応答する
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
+	enc.SetIndent("", "  ")  // indentはスペース2つ
 	err = enc.Encode(&alerts)
 
 	return err

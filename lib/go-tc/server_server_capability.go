@@ -21,7 +21,12 @@ package tc
 
 // ServerServerCapability represents an association between a server capability and a server.
 type ServerServerCapability struct {
+
+	// jsonでコードでは「json:"lastUpdated"」が優先され、ORMマッピングの場合には「db:"last_updated"」が優先されます。
 	LastUpdated      *TimeNoMod `json:"lastUpdated" db:"last_updated"`
+
+	// 下記の「omitempty」というのは特別な識別子であり出力時にその項目がなければ省略するというものです。ドキュメントにも記載されています。
+	// https://pkg.go.dev/encoding/json#Marshal
 	Server           *string    `json:"serverHostName,omitempty" db:"host_name"`
 	ServerID         *int       `json:"serverId" db:"server"`
 	ServerCapability *string    `json:"serverCapability" db:"server_capability"`

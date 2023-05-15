@@ -436,6 +436,7 @@ type parameterWithProfilesMap struct {
 
 // tcParamsToParamsWithProfiles unmarshals the Profiles that the tc struct doesn't.
 func tcParamsToParamsWithProfiles(tcParams []tc.Parameter) ([]parameterWithProfiles, error) {
+
 	params := make([]parameterWithProfiles, 0, len(tcParams))
 	for _, tcParam := range tcParams {
 		param := parameterWithProfiles{Parameter: tcParam}
@@ -448,6 +449,7 @@ func tcParamsToParamsWithProfiles(tcParams []tc.Parameter) ([]parameterWithProfi
 		param.Profiles = nil
 		params = append(params, param)
 	}
+
 	return params, nil
 }
 
@@ -797,10 +799,12 @@ func LayerProfiles(
 	profileNames []string, // from a Server, Delivery Service, or other object with "layered profiles".
 	tcParams []tc.Parameter, // from v4-client.GetParameters -> /4.0/parameters
 ) ([]tc.Parameter, error) {
+
 	params, err := tcParamsToParamsWithProfiles(tcParams)
 	if err != nil {
 		return nil, errors.New("parsing parameters profiles: " + err.Error())
 	}
+
 	return layerProfilesFromWith(profileNames, params), nil
 }
 

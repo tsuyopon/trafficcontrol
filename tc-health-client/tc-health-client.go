@@ -89,6 +89,7 @@ func main() {
 	// バージョンとビルド時刻の情報を起動完了時に表示する
 	log.Infof("startup complete, version: %s, built: %s\n", Version, BuildTimestamp)
 
-	// メイン処理
+	// 下記がメイン処理で下記の中でプロセスとして無限ループしている。
+	// 定期的にparentの情報を更新している。TrafficMonitorからの取得時にparent情報が取得できなければ、traffic_ctlコマンドでparentをup, downの制御を行なっている
 	tmInfo.PollAndUpdateCacheStatus()
 }

@@ -239,6 +239,8 @@ public class ConfigHandler {
 				federationsWatcher.configure(config);
 				steeringWatcher.configure(config);
 				letsEncryptDnsChallengeWatcher.configure(config);
+
+				// ここでTrafficRouterをnewします。
 				trafficRouterManager.setCacheRegister(cacheRegister);
 				trafficRouterManager.getNameServer().setEcsEnable(JsonUtils.optBoolean(config, "ecsEnable", false));
 				trafficRouterManager.getNameServer().setEcsEnabledDses(deliveryServices.stream().filter(DeliveryService::isEcsEnabled).collect(Collectors.toSet()));

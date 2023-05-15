@@ -118,14 +118,21 @@ const (
 // GetDeliveryServicesByServer retrieves all Delivery Services assigned to the
 // server with the given ID.
 func (to *Session) GetDeliveryServicesByServer(id int, opts RequestOptions) (tc.DeliveryServicesResponseV4, toclientlib.ReqInf, error) {
+
 	var data tc.DeliveryServicesResponseV4
+
+	// /servers/%d/deliveryservices (GET)  %dにはIDが入る
 	reqInf, err := to.get(fmt.Sprintf(apiServerDeliveryServices, id), opts, &data)
 	return data, reqInf, err
+
 }
 
 // GetDeliveryServices returns (tenant-visible) Delivery Services.
 func (to *Session) GetDeliveryServices(opts RequestOptions) (tc.DeliveryServicesResponseV4, toclientlib.ReqInf, error) {
 	var data tc.DeliveryServicesResponseV4
+
+	// /api/4.0/deliveryservices (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/deliveryservices.html#get
 	reqInf, err := to.get(apiDeliveryServices, opts, &data)
 	return data, reqInf, err
 }
@@ -187,6 +194,7 @@ func (to *Session) CreateDeliveryService(ds tc.DeliveryServiceV4, opts RequestOp
 		ds.TenantID = &ten.Response[0].ID
 	}
 
+	// /api/4.0/deliveryservices (POST)
 	reqInf, err := to.post(apiDeliveryServices, RequestOptions{Header: opts.Header}, ds, &resp)
 	if err != nil {
 		return resp, reqInf, err

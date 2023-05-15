@@ -91,7 +91,6 @@ public final class NameServerMain {
      * @param args
      */
 
-    // 下記がtraffic_routerの起点として呼び出されるはず。
     public static void main(final String[] args) {
 
         // 「traffic_router/core/src/main/resources/dns-traffic-router.xml」には「classpath:/applicationContext.xml」がimportされる記述があります。

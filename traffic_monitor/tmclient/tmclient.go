@@ -131,12 +131,14 @@ func (c *TMClient) CRStates(raw bool) (tc.CRStates, error) {
 	// 引数のrawの値によって、「/publish/CrStates」か「/publish/CrStates?raw」かを決定する
 	path := "/publish/CrStates"
 	if raw {
+		// see: https://traffic-control-cdn.readthedocs.io/en/latest/admin/traffic_monitor.html#distributed-polling
 		path += "?raw"
 	}
 
 	obj := tc.CRStates{}
 
 	// 「/publish/CrStates」か「/publish/CrStates?raw」にアクセスする
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_monitor/traffic_monitor_api.html#publish-crstates
 	if err := c.GetJSON(path, &obj); err != nil {
 		return tc.CRStates{}, err // GetJSON adds context
 	}

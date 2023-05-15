@@ -36,6 +36,7 @@ while ! to-ping 2>/dev/null; do
 done
 
 # NOTE: order dependent on foreign key references, e.g. profiles must be loaded before parameters
+# 下記の順番で/shared/enroller/<xxxx>配下に設定ファイルを作成する
 endpoints="cdns types divisions regions phys_locations tenants users cachegroups profiles parameters server_capabilities servers topologies deliveryservices federations server_server_capabilities deliveryservice_servers deliveryservices_required_capabilities"
 
 # envsubstで標準入力されたテンプレートでそのテンプレート内部の文字列を置換するには 「envsubst $HOGE1 $HOGE2 < template」のようにする(envsubstに引数を与えないことも可能)

@@ -28,6 +28,8 @@ const apiParameters = "/parameters"
 // CreateParameter performs a POST to create a Parameter.
 func (to *Session) CreateParameter(pl tc.Parameter, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
 	var alerts tc.Alerts
+	// /api/4.0/parameters (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#post
 	reqInf, err := to.post(apiParameters, opts, pl, &alerts)
 	return alerts, reqInf, err
 }
@@ -35,6 +37,8 @@ func (to *Session) CreateParameter(pl tc.Parameter, opts RequestOptions) (tc.Ale
 // CreateMultipleParameters performs a POST to create multiple Parameters at once.
 func (to *Session) CreateMultipleParameters(pls []tc.Parameter, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
 	var alerts tc.Alerts
+	// /api/4.0/parameters (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#post
 	reqInf, err := to.post(apiParameters, opts, pls, &alerts)
 	return alerts, reqInf, err
 }
@@ -51,6 +55,8 @@ func (to *Session) UpdateParameter(id int, pl tc.Parameter, opts RequestOptions)
 // GetParameters returns all Parameters in Traffic Ops.
 func (to *Session) GetParameters(opts RequestOptions) (tc.ParametersResponse, toclientlib.ReqInf, error) {
 	var data tc.ParametersResponse
+	// /api/4.0/parameters (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 	reqInf, err := to.get(apiParameters, opts, &data)
 	return data, reqInf, err
 }

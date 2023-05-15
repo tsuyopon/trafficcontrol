@@ -138,6 +138,8 @@ public class PeriodicResourceUpdater {
 		final File existingDB = new File(databaseLocation);
 		if(existingDB.exists()) {
 			try {
+				// TrafficMonitorWatcher.javaのinitからlistnerはセットされる
+				// 第１引数に指定された値によって呼び出すlistnerのupdate()が変わってくる
 				listener.update(IOUtils.toString(new FileReader(existingDB)));
 			} catch (Exception e) {
 				LOGGER.warn(e,e);

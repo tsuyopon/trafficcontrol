@@ -35,6 +35,9 @@ const (
 // CreateProfileParameter assigns a Parameter to a Profile.
 func (to *Session) CreateProfileParameter(pp tc.ProfileParameterCreationRequest, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
 	var alerts tc.Alerts
+
+	// /api/4.0/profileparameters (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profileparameters.html#post
 	reqInf, err := to.post(apiProfileParameters, opts, pp, &alerts)
 	return alerts, reqInf, err
 }

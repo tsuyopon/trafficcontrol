@@ -73,7 +73,9 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 	private Path databasesDirectory;
 
 	public AbstractUpdatable stateHandler = new AbstractUpdatable() {
+
 		public String toString() {return "status listener";}
+
 		@Override
 		public synchronized boolean update(final String jsonStr) {
 			try {
@@ -86,6 +88,7 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 			}
 			return false;
 		}
+
 		@Override
 		public boolean noChange() {
 			try {
@@ -112,7 +115,10 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 
 	@SuppressWarnings("PMD.CyclomaticComplexity")
 	public void init() {
+
 		final AbstractUpdatable crHandler = new AbstractUpdatable() {
+
+			// PeriodicResourceUpdater.java中のputCurrentから呼ばれる
 			@Override
 			public boolean update(final String configStr) {
 				try {
@@ -127,7 +133,9 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 
 				return false;
 			}
+
 			public String toString() {return "config listener";}
+
 			@Override
 			public boolean noChange() {
 				try {

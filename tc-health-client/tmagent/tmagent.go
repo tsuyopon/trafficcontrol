@@ -269,7 +269,7 @@ func (c *ParentInfo) GetCacheStatuses() (tc.CRStates, error) {
 		return tc.CRStates{}, errors.New("finding a trafficmonitor: " + err.Error())
 	}
 
-	// traffic_monitor/tmclient/tmclient.goがよばれる
+	// traffic_monitor/tmclient/tmclient.goが呼ばれる。初期値として「http://<monitorホスト名>」が指定される
 	tmc := tmclient.New("http://"+tmHostName, config.GetRequestTimeout())
 
 	// Use a proxy to query TM if the ProxyURL is set
@@ -277,6 +277,7 @@ func (c *ParentInfo) GetCacheStatuses() (tc.CRStates, error) {
 		tmc.Transport = &http.Transport{Proxy: http.ProxyURL(c.Cfg.ParsedProxyURL)}
 	}
 
+	// 「/publish/CrStates」にアクセスして取得した構造体の結果を応答する
 	return tmc.CRStates(false)
 }
 
@@ -313,14 +314,18 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 		if isNew {
 			// 設定が読み込まれた場合
 
-			// 
+			// TrafficMonitor用のCredential情報を取得します
 			if err = config.ReadCredentials(&newCfg, false); err != nil {
 				log.Errorln("could not load credentials for config updates, keeping the old config")
 			} else {
 
 				if err = config.GetTrafficMonitors(&newCfg); err != nil {
+					// TrafficMonitorのリスト取得に失敗した場合にはエラーメッセージを表示する
 					log.Errorln("could not update the list of trafficmonitors, keeping the old config")
 				} else {
+					// TrafficMonitorのリスト取得に成功した場合
+
+					// 既存の設定情報の更新を行う
 					config.UpdateConfig(&c.Cfg, &newCfg)
 					log.Infoln("the configuration has been successfully updated")
 				}
@@ -329,6 +334,7 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 
 		} else { // check for updates to the credentials file
 			// 設定が読み込まれない場合
+
 			if c.Cfg.CredentialFile.Filename != "" {
 
 				modTime, err := util.GetFileModificationTime(c.Cfg.CredentialFile.Filename)
@@ -349,6 +355,7 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 		// check for parent and strategies config file updates, and trafficserver
 		// host status changes.  If an error is encountered reading data the current
 		// parents lists and hoststatus remains unchanged.
+		// parent.config, strategies.yaml, traffic_ctlコマンドによるhost status変化などを確認してParentの構造体中の情報を更新する
 		if err := c.UpdateParentInfo(); err != nil {
 			log.Errorf("could not load new ATS parent info: %s\n", err.Error())
 		} else {
@@ -363,8 +370,11 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 
 		caches := _c.Caches
 		if err != nil {
+			// キャッシュサーバの取得ができなかった場合
 
 			log.Errorf("error in TrafficMonitor polling: %s\n", err.Error())
+
+			// TrafficMonitorの情報を取得する
 			if err = config.GetTrafficMonitors(&c.Cfg); err != nil {
 				log.Errorln("could not update the list of trafficmonitors, keeping the old config")
 			} else {
@@ -383,15 +393,20 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 			continue
 		}
 
+		// 下記の$.cachesで処理をイテレーションしています。
+		// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_monitor/traffic_monitor_api.html#publish-crstates
 		for k, v := range caches {
 			hostName := string(k)
 			cs, ok := c.Parents[hostName]
 			if ok {
+
 				// update the polling time
 				cs.LastTmPoll = now
 				c.Parents[hostName] = cs
 				tmAvailable := v.IsAvailable
+
 				if cs.available(c.Cfg.ReasonCode) != tmAvailable {
+
 					// do not mark down if the configuration disables mark downs.
 					if !c.Cfg.EnableActiveMarkdowns && !tmAvailable {
 						log.Infof("TM reports that %s is not available and should be marked DOWN but, mark downs are disabled by configuration", hostName)
@@ -400,7 +415,9 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 							log.Errorln(err.Error())
 						}
 					}
+
 				}
+
 				// if the host is available clear the unavailable poll count if not 0.
 				if cs.available(c.Cfg.ReasonCode) && tmAvailable {
 					if cs.UnavailablePollCount > 0 {
@@ -410,6 +427,7 @@ func (c *ParentInfo) PollAndUpdateCacheStatus() {
 						c.Parents[hostName] = cs
 					}
 				}
+
 			}
 		}
 
@@ -569,7 +587,12 @@ func parseFqdn(fqdn string) string {
 }
 
 func (c *ParentInfo) execTrafficCtl(fqdn string, available bool) error {
+
+	// TBD: reasonはどのようにして決めるのが良いのか?
+	// see: https://docs.trafficserver.apache.org/en/latest/appendices/command-line/traffic_ctl.en.html#cmdoption-traffic_ctl-host-reason
 	reason := c.Cfg.ReasonCode
+
+	// traffic_ctlのパスを作成する
 	tc := filepath.Join(c.TrafficServerBinDir, TrafficCtl)
 
 	var status string
@@ -603,6 +626,7 @@ func (c *ParentInfo) markParent(fqdn string, cacheStatus string, available bool)
 
 	pv, ok := c.Parents[hostName]
 	if ok {
+
 		activeReason := pv.ActiveReason
 		localReason := pv.LocalReason
 		unavailablePollCount := pv.UnavailablePollCount
@@ -610,13 +634,17 @@ func (c *ParentInfo) markParent(fqdn string, cacheStatus string, available bool)
 
 		log.Debugf("hostName: %s, UnavailablePollCount: %d, available: %v", hostName, unavailablePollCount, available)
 
+		// 「traffic_ctl host up 〜」や「traffic_ctl host down 〜」によりEDGE側のparent設定情報を変更することが可能である
 		if !available { // unavailable
 			unavailablePollCount += 1
+
+			// 設定ファイル中のunavailable-poll-thresholdの設定の閾値によってそのままupさせるか、downさせるかを決定する
 			if unavailablePollCount < c.Cfg.UnavailablePollThreshold {
 				log.Infof("TM indicates %s is unavailable but the UnavailablePollThreshold has not been reached", hostName)
 				hostAvailable = true
 			} else {
 				// marking the host down
+				// 「例 traffic_ctl host down cdn-cache-01.foo.com --reason manual」 ここでは必ずdownが実行される
 				err = c.execTrafficCtl(fqdn, available)
 				if err != nil {
 					log.Errorln(err.Error())
@@ -628,13 +656,17 @@ func (c *ParentInfo) markParent(fqdn string, cacheStatus string, available bool)
 					log.Infof("marked parent %s DOWN, cache status was: %s\n", hostName, cacheStatus)
 				}
 			}
+
 		} else { // available
 			// marking the host up
 			markUpPollCount += 1
+
+			// 設定ファイル中のmarkup-poll-thresholdの設定の閾値によってそのままupさせるか、downさせるかを決定する
 			if markUpPollCount < c.Cfg.MarkUpPollThreshold {
 				log.Infof("TM indicates %s is available but the MarkUpPollThreshold has not been reached", hostName)
 				hostAvailable = false
 			} else {
+				// 「例 traffic_ctl host up cdn-cache-01.foo.com --reason manual」 ここでは必ずupが実行される
 				err = c.execTrafficCtl(fqdn, available)
 				if err != nil {
 					log.Errorln(err.Error())
@@ -749,6 +781,14 @@ func (c *ParentInfo) readHostStatus(parentStatus map[string]ParentStatus) error 
 					fqdn = fqdnField[0]
 				}
 
+				// $ traffic_ctl metric match host_status の出力サンプル
+				//   proxy.process.host_status.cdn-cache-01.foo.com HOST_STATUS_DOWN,ACTIVE:UP:0:0,LOCAL:UP:0:0,MANUAL:DOWN:1556896844:0,SELF_DETECT:UP:0
+				//   proxy.process.host_status.cdn-cache-02.foo.com HOST_STATUS_UP,ACTIVE:UP:0:0,LOCAL:UP:0:0,MANUAL:UP:0:0,SELF_DETECT:UP:0
+				//   proxy.process.host_status.cdn-cache-origin-01.foo.com HOST_STATUS_UP,ACTIVE:UP:0:0,LOCAL:UP:0:0,MANUAL:UP:0:0,SELF_DETECT:UP:0
+				// 
+				// cf. https://docs.trafficserver.apache.org/en/latest/appendices/command-line/traffic_ctl.en.html#cmdoption-traffic_ctl-host-reason
+
+				// 「ACTIVE:UP:0:0,LOCAL:UP:0:0,MANUAL:DOWN:1556896844:0,SELF_DETECT:UP:0」の部分がfields[1]となる。それを「,」でセパレートする
 				statField := strings.Split(fields[1], ",")
 				if len(statField) == 5 {
 

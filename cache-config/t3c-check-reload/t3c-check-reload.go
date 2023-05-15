@@ -40,6 +40,8 @@ var Version = "0.4"
 // This is overwritten by the build with the current project version.
 var GitRevision = "nogit"
 
+// t3c-check-reloadは変更されたファイルやインストールするプラグインなどの情報をjson形式で受け取り、trafficserverプロセスに対してreload, restart, 何もしないなどを決定します。
+// t3c-check-reloadでは出力によって、reload, restart, 何もしないなどの処理を分岐している
 func main() {
 	// presumably calculated by by t3c-check-refs
 	// TODO remove? The blueprint says t3c/ORT will no longer install packages
@@ -61,6 +63,12 @@ func main() {
 		fmt.Println("Error reading json input", err)
 	}
 
+	// jsonファイルは下記の形式で指定される。changed_filesはカンマ区切りのリストで指定されているので下記で取得している
+	//   {"changed_files":"<list of files>","installed_plugins":"<list of plugins>"}
+	//    説明
+	//          changed_files: 変更された設定ファイルパスのカンマで区切られたリスト、
+	//          installed_plugins: インストールされたプラグインパッケージの神間で区切られたリスト
+	// 
 	changedConfigFiles := strings.Split(changedCfg.ChangedFiles, ",")
 	changedConfigFiles = StrMap(changedConfigFiles, strings.TrimSpace)
 	changedConfigFiles = StrRemoveIf(changedConfigFiles, StrIsEmpty)
@@ -78,24 +86,32 @@ func main() {
 
 	// {"plugin.config", "50-ats.rules"}の2つのファイルがrangeで実行される
 	for _, fileRequiringRestart := range configFilesRequiringRestart {
+
+		// 下記では変更があったファイル一覧でイテレーション
 		for _, changedPath := range changedConfigFiles {
-			// もしファイルが一致したら再起動させる
+			// もしファイルのsuffixが一致したら再起動させる
 			if strings.HasSuffix(changedPath, fileRequiringRestart) {
 				ExitRestart()
 			}
 		}
 	}
 
-	// 
+	// 下記では変更があったファイル一覧でイテレーションする
 	// 「ssl_multicert.config」や「hdr_rw_」、「url_sig_」、「uri_signing_」、「plugin.config」、「50-ats.rules」を含む場合にはrealodを実行する
 	for _, path := range changedConfigFiles {
+
 		// TODO add && ssl keys install
+		// 変更されたファイルに「ssl_multicert.config」が含まれていたら、reloadさせる
 		if strings.Contains(path, "ssl_multicert.config") /* && sslKeysInstalled */ {
 			ExitReload()
 		}
+
+		// 変更されたファイルに「/trafficserver/」が含まれていたら、reloadさせる
 		if strings.Contains(path, "/trafficserver/") {
 			ExitReload()
 		}
+
+		// 変更されたファイルに「hdr_rw_」、「url_sig_」、「uri_signing_」、「plugin.config」、「50-ats.rules」を含む場合にはrealodを実行する
 		if strings.Contains(path, "hdr_rw_") ||
 			strings.Contains(path, "url_sig_") ||
 			strings.Contains(path, "uri_signing_") ||

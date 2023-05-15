@@ -68,10 +68,12 @@ func main() {
 	// update-status: 更新後のステータス想定の取得
 	// status: 設定されている現状のステータスの取得
 	if cfg.GetData != "" {
+		// 下記がメイン処理 --get-data=<mode>に指定された値に応じてハンドラが実行される
 		if err := t3cutil.WriteData(cfg.TCCfg); err != nil {
 			log.Errorf("writing data: %s\n", err.Error())
 			os.Exit(3)
 		}
 	}
+
 	cfg.TCCfg.TOClient.WriteFsCookie(torequtil.CookieCachePath(cfg.TOUser))
 }

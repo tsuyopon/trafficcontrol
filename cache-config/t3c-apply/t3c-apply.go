@@ -54,9 +54,11 @@ const (
 )
 
 func runSysctl(cfg config.Cfg) {
+
 	if cfg.ReportOnly {  //  --report-only=true
 		return
 	}
+
 	if cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {  // --service-action=restart
 		_, rc, err := util.ExecCommand("/usr/sbin/sysctl", "-p")
 		if err != nil {
@@ -65,6 +67,7 @@ func runSysctl(cfg config.Cfg) {
 			log.Debugf("sysctl -p ran succesfully.")
 		}
 	}
+
 }
 
 const LockFilePath = "/var/run/t3c.lock"

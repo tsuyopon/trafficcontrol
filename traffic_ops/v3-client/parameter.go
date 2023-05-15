@@ -97,15 +97,20 @@ func (to *Session) GetParameterByName(name string) ([]tc.Parameter, toclientlib.
 }
 
 func (to *Session) GetParameterByConfigFileWithHdr(configFile string, header http.Header) ([]tc.Parameter, toclientlib.ReqInf, error) {
+
+	// /parameters?configFile=<configFile> (GET)
 	uri := APIParameters + "?configFile=" + url.QueryEscape(configFile)
 	var data tc.ParametersResponse
 	reqInf, err := to.get(uri, header, &data)
 	return data.Response, reqInf, err
+
 }
 
 // GetParameterByConfigFile GETs a Parameter by the Parameter ConfigFile.
 // Deprecated: GetParameterByConfigFile will be removed in 6.0. Use GetParameterByConfigFileWithHdr.
 func (to *Session) GetParameterByConfigFile(configFile string) ([]tc.Parameter, toclientlib.ReqInf, error) {
+	// /parameters?configFile=<configFile> (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 	return to.GetParameterByConfigFileWithHdr(configFile, nil)
 }
 

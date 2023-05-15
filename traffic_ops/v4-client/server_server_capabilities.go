@@ -29,9 +29,13 @@ const apiServerServerCapabilities = "/server_server_capabilities"
 
 // CreateServerServerCapability assigns a Server Capability to a Server.
 func (to *Session) CreateServerServerCapability(ssc tc.ServerServerCapability, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
+
 	var alerts tc.Alerts
+	//  /api/4.0/server_server_capabilities(POST)
+	//  see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/server_server_capabilities.html#post
 	reqInf, err := to.post(apiServerServerCapabilities, opts, ssc, &alerts)
 	return alerts, reqInf, err
+
 }
 
 // DeleteServerServerCapability unassigns a Server Capability from a Server.

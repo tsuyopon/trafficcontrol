@@ -60,6 +60,7 @@ type TCCfg struct {
 	T3CVersion string
 }
 
+// --get-data=<mode>で指定されるmodeと関数ハンドラとのマッピングをする
 func GetDataFuncs() map[string]func(TCCfg, io.Writer) error {
 	return map[string]func(TCCfg, io.Writer) error{
 		`update-status`: WriteServerUpdateStatus,
@@ -80,6 +81,7 @@ func GetServerUpdateStatus(cfg TCCfg) (*atscfg.ServerUpdateStatus, error) {
 }
 
 func WriteData(cfg TCCfg) error {
+
 	log.Infoln("Getting data '" + cfg.GetData + "'")
 
 	// 「GetDataFuncs()」はL63で定義される「map[string]func(TCCfg, io.Writer) error」型を返します。
@@ -88,6 +90,8 @@ func WriteData(cfg TCCfg) error {
 	if !ok {
 		return errors.New("unknown data request '" + cfg.GetData + "'")
 	}
+
+	// 取得した関数ハンドラはここで実行される
 	return dataF(cfg, os.Stdout)
 }
 
@@ -154,40 +158,59 @@ func WriteServerUpdateStatus(cfg TCCfg, output io.Writer) error {
 // Note this is identical to /ort/serverName/packages.
 // --get-data=packages がオプションとして指定された場合に呼ばれるハンドラ
 func WritePackages(cfg TCCfg, output io.Writer) error {
+
 	packages, err := GetPackages(cfg)
 	if err != nil {
+		// パッケージの取得に失敗
 		return errors.New("getting ORT server packages: " + err.Error())
 	}
+
+	// packagesの内容をJSONエンコードして、標準出力する
 	if err := json.NewEncoder(output).Encode(packages); err != nil {
 		return errors.New("writing packages: " + err.Error())
 	}
+
 	return nil
+
 }
 
+// サーバ情報を指定してパッケージ一覧を取得する 
 func GetPackages(cfg TCCfg) ([]Package, error) {
+
+	// 「t3cutil/toreq/clientfuncs.go」が呼ばれる
 	server, _, err := cfg.TOClient.GetServerByHostName(string(cfg.CacheHostName), nil)
 	if err != nil {
+		// リクエストにエラーが発生した場合
 		return nil, errors.New("getting server: " + err.Error())
 	} else if len(server.ProfileNames) == 0 {
+		// 取得したがレスポンスにそのサーバのprofileNamesが存在しない場合
 		return nil, errors.New("getting server: nil profile")
 	} else if server.HostName == nil {
+		// 取得したがレスポンスにそのサーバのHostNameが存在しない場合
 		return nil, errors.New("getting server: nil hostName")
 	}
+
+	// 下記の値を取得する
+	// /parameters?configFile=<configFile> (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 	allPackageParams, reqInf, err := cfg.TOClient.GetConfigFileParameters(atscfg.PackagesParamConfigFile, nil)
 	log.Infoln(toreq.RequestInfoStr(reqInf, "GetPackages.GetConfigFileParameters("+atscfg.PackagesParamConfigFile+")"))
 	if err != nil {
 		return nil, errors.New("getting server '" + *server.HostName + "' package parameters: " + err.Error())
 	}
 
+	// 取得したレスポンスを構造体に詰める
 	serverPackageParams, err := atscfg.GetServerParameters(server, allPackageParams)
 	if err != nil {
 		return nil, errors.New("calculating server '" + *server.HostName + "' package parameters: " + err.Error())
 	}
 
+	// 出力レスポンスようにPackage構造体のスライスを用意して、そこに先ほどAPIから取得したServerPackageParamsの情報を追加していく
 	packages := []Package{}
 	for _, param := range serverPackageParams {
 		packages = append(packages, Package{Name: param.Name, Version: param.Value})
 	}
+
 	return packages, nil
 }
 
