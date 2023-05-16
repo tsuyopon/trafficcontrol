@@ -406,6 +406,7 @@ func (cl *TOClient) GetTopologies(reqHdr http.Header) ([]tc.Topology, toclientli
 }
 
 func (cl *TOClient) GetConfigFileParameters(configFile string, reqHdr http.Header) ([]tc.Parameter, toclientlib.ReqInf, error) {
+
 	if cl.c == nil {
 		return cl.old.GetConfigFileParameters(configFile)
 	}
@@ -714,6 +715,7 @@ func (cl *TOClient) GetCDNSSLKeys(cdnName tc.CDNName, reqHdr http.Header) ([]tc.
 }
 
 func (cl *TOClient) GetStatuses(reqHdr http.Header) ([]tc.Status, toclientlib.ReqInf, error) {
+
 	if cl.c == nil {
 		return cl.old.GetStatuses()
 	}
@@ -721,18 +723,22 @@ func (cl *TOClient) GetStatuses(reqHdr http.Header) ([]tc.Status, toclientlib.Re
 	statuses := []tc.Status{}
 	reqInf := toclientlib.ReqInf{}
 	err := torequtil.GetRetry(cl.NumRetries, "statuses", &statuses, func(obj interface{}) error {
+
 		toStatus, toReqInf, err := cl.c.GetStatuses(*ReqOpts(reqHdr))
 		if err != nil {
 			return errors.New("getting server update statuses from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}
+
 		status := obj.(*[]tc.Status)
 		*status = toStatus.Response
 		reqInf = toReqInf
 		return nil
 	})
+
 	if err != nil {
 		return nil, reqInf, errors.New("getting server update statuses: " + err.Error())
 	}
+
 	return statuses, reqInf, nil
 }
 

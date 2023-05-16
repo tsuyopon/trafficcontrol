@@ -108,17 +108,25 @@ const SystemInfoParamConfigFile = `global`
 //  '{response: {parameters:' wrapper.
 // --get-data=system-info がオプションとして指定された場合に呼ばれるハンドラ
 func WriteSystemInfo(cfg TCCfg, output io.Writer) error {
+
+	// /parameters?configFile=global (GET) system-infoの場合には「configFile」のパラメータには明示的な値として「global」が指定することに注意
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 	paramArr, _, err := cfg.TOClient.GetConfigFileParameters(SystemInfoParamConfigFile, nil)
 	if err != nil {
 		return errors.New("getting system info parameters: " + err.Error())
 	}
+
+	// 出力をスライスに詰める
 	params := map[string]string{}
 	for _, param := range paramArr {
 		params[param.Name] = param.Value
 	}
+
+	// JSONにエンコード
 	if err := json.NewEncoder(output).Encode(params); err != nil {
 		return errors.New("encoding system info parameters: " + err.Error())
 	}
+
 	return nil
 }
 
@@ -127,13 +135,16 @@ func WriteSystemInfo(cfg TCCfg, output io.Writer) error {
 // wrapper.
 // --get-data=statuses がオプションとして指定された場合に呼ばれるハンドラ
 func WriteStatuses(cfg TCCfg, output io.Writer) error {
+
 	statuses, _, err := cfg.TOClient.GetStatuses(nil)
 	if err != nil {
 		return errors.New("getting statuses: " + err.Error())
 	}
+
 	if err := json.NewEncoder(output).Encode(statuses); err != nil {
 		return errors.New("encoding statuses: " + err.Error())
 	}
+
 	return nil
 }
 
@@ -159,6 +170,7 @@ func WriteServerUpdateStatus(cfg TCCfg, output io.Writer) error {
 // --get-data=packages がオプションとして指定された場合に呼ばれるハンドラ
 func WritePackages(cfg TCCfg, output io.Writer) error {
 
+	// 指定されたサーバのパッケージ情報を取得する
 	packages, err := GetPackages(cfg)
 	if err != nil {
 		// パッケージの取得に失敗
@@ -191,7 +203,7 @@ func GetPackages(cfg TCCfg) ([]Package, error) {
 	}
 
 	// 下記の値を取得する
-	// /parameters?configFile=<configFile> (GET)
+	// /parameters?configFile=package (GET)  --get-data=packagesの場合にはconfigFileには「package」が明示的に指定されることになる。
 	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 	allPackageParams, reqInf, err := cfg.TOClient.GetConfigFileParameters(atscfg.PackagesParamConfigFile, nil)
 	log.Infoln(toreq.RequestInfoStr(reqInf, "GetPackages.GetConfigFileParameters("+atscfg.PackagesParamConfigFile+")"))

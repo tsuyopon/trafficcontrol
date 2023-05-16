@@ -41,22 +41,29 @@ type LatestTimestamp struct {
 // along with the max time
 // If the returned boolean is false, there is no need to run the main query for the GET API endpoint, and we return a 304 status
 func TryIfModifiedSinceQuery(tx *sqlx.Tx, h http.Header, queryValues map[string]interface{}, query string) (bool, time.Time) {
+
 	var maxTime time.Time
 	ims := []string{}
 	var imsDate time.Time
 	var ok bool
 	runSecond := true
 	dontRunSecond := false
+
 	if h == nil {
 		return runSecond, maxTime
 	}
+
 	ims = h[rfc.IfModifiedSince]
 	if ims == nil || len(ims) == 0 {
 		return runSecond, maxTime
 	}
+
 	if imsDate, ok = rfc.ParseHTTPDate(ims[0]); !ok {
+		// 日付のパース処理に失敗した場合
 		return runSecond, maxTime
 	} else {
+		// 日付のパース処理に成功した場合
+
 		rows, err := tx.NamedQuery(query, queryValues)
 		if rows != nil {
 			defer rows.Close()

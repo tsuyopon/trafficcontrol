@@ -326,6 +326,7 @@ func CompileRoutes(routes map[string][]PathHandler) map[string][]CompiledRoute {
 }
 
 // Handler - generic handler func used by the Handlers hooking into the routes
+// 同ファイル(routing.go)のRegisterRoutes関数から呼ばれる
 func Handler(
 	routes map[string][]CompiledRoute,
 	versions map[api.Version]struct{},
@@ -338,6 +339,7 @@ func Handler(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+
 	reqID := getReqID()
 
 	reqIDStr := strconv.FormatUint(reqID, 10)
@@ -348,10 +350,10 @@ func Handler(
 	}()
 
 	ctx := r.Context()
-	ctx = context.WithValue(ctx, api.DBContextKey, db)
-	ctx = context.WithValue(ctx, api.ConfigContextKey, cfg)
-	ctx = context.WithValue(ctx, api.ReqIDContextKey, reqID)
-	ctx = context.WithValue(ctx, api.TrafficVaultContextKey, tv)
+	ctx = context.WithValue(ctx, api.DBContextKey, db)           // "db"
+	ctx = context.WithValue(ctx, api.ConfigContextKey, cfg)      // "context"
+	ctx = context.WithValue(ctx, api.ReqIDContextKey, reqID)     // "reqid"
+	ctx = context.WithValue(ctx, api.TrafficVaultContextKey, tv) // "tv"
 
 	// plugins have no pre-parsed path params, but add an empty map so they can use the api helper funcs that require it.
 	pluginCtx := context.WithValue(ctx, api.PathParamsKey, map[string]string{})
@@ -370,10 +372,12 @@ func Handler(
 	}
 
 	for _, compiledRoute := range mRoutes {
+
 		match := compiledRoute.Regex.FindStringSubmatch(requested)
 		if len(match) == 0 {
 			continue
 		}
+
 		params := map[string]string{}
 		for i, v := range compiledRoute.Params {
 			params[v] = match[i+1]
@@ -395,8 +399,9 @@ func Handler(
 
 	var backendRouteHandled bool
 	backendConfig := GetBackendConfig()
-	// 下記のロジックは--backendにより設定が追加された場合の処理
+	// 下記のロジックは-backendcfgにより設定が追加された場合の処理 (レポジトリ内部に配置されているサンプルはbackends.confでサンプルとして配置されている)
 	for i, backendRoute := range backendConfig.Routes {
+
 		var params []string
 		routeParams := map[string]string{}
 		if backendRoute.Method == r.Method {
@@ -420,6 +425,7 @@ func Handler(
 
 			// 
 			if backendRoute.Opts.Algorithm == "" || backendRoute.Opts.Algorithm == "roundrobin" {
+
 				index := backendRoute.Index % len(backendRoute.Hosts)
 				host := backendRoute.Hosts[index]
 				backendRoute.Index++
@@ -429,13 +435,16 @@ func Handler(
 					Host:   host.Hostname + ":" + strconv.Itoa(host.Port),
 					Scheme: host.Protocol,
 				})
+
 				rp.Transport = &http.Transport{
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: backendRoute.Insecure},
 				}
+
 				rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 					api.HandleErr(w, r, nil, http.StatusInternalServerError, nil, err)
 					return
 				}
+
 				routeCtx := context.WithValue(ctx, api.DBContextKey, db)
 				routeCtx = context.WithValue(routeCtx, api.PathParamsKey, routeParams)
 				routeCtx = context.WithValue(routeCtx, middleware.RouteID, backendRoute.ID)
@@ -464,6 +473,7 @@ func Handler(
 
 // HandleBackendRoute does all the pre processing for the backend routes.
 func HandleBackendRoute(cfg *config.Config, route config.BackendRoute, w http.ResponseWriter, r *http.Request) (error, error, int) {
+
 	var userErr, sysErr error
 	var errCode int
 	var user auth.CurrentUser
@@ -473,13 +483,20 @@ func HandleBackendRoute(cfg *config.Config, route config.BackendRoute, w http.Re
 	if userErr != nil || sysErr != nil {
 		return userErr, sysErr, errCode
 	}
+
+	// `json:role_based_permissions`の値がtrueであれば下記のコードパスが実施される
 	if cfg.RoleBasedPermissions {
+
+		// route.Permissionsで指定したパーミッション情報に対して、現在のユーザーに不足しているパーミッションがないかを確認する。
 		missingPerms := user.MissingPermissions(route.Permissions...)
+
+		// 0であれば全てのパーミッションを保持しているが、1以上ならば(下記判定では0以外)エラーとする。
 		if len(missingPerms) != 0 {
 			msg := strings.Join(missingPerms, ", ")
 			return fmt.Errorf("missing required Permissions: %s", msg), nil, http.StatusForbidden
 		}
 	}
+
 	api.AddUserToReq(r, user)
 	var params []string
 	inf, userErr, sysErr, errCode = api.NewInfo(r, params, nil)
@@ -488,6 +505,7 @@ func HandleBackendRoute(cfg *config.Config, route config.BackendRoute, w http.Re
 	}
 	defer inf.Close()
 	return nil, nil, http.StatusOK
+
 }
 
 // IsRequestAPIAndUnknownVersion returns true if the request starts with `/api` and is a version not in the list of versions.
@@ -524,6 +542,7 @@ func IsRequestAPIAndUnknownVersion(req *http.Request, versions map[api.Version]s
 	return true // path starts with `/api`, and version is unknown
 }
 
+// APIのURIのAPIバージョン(3.0, 3.1, 4.0)をパースして、バージョン用構造体を返却する
 func stringVersionToApiVersion(version string) (api.Version, error) {
 
 	// ドットでバージョンをsplitする
@@ -573,6 +592,7 @@ func RegisterRoutes(d ServerData) error {
 
 	// HTTPサーバにAPIエンドポイントの登録を行う
 	d.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// 同ファイルのHandlerを呼び出す
 		Handler(compiledRoutes, versions, catchall, d.DB, &d.Config, getReqID, d.Plugins, d.TrafficVault, w, r)
 	})
 

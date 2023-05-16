@@ -143,15 +143,20 @@ func (pa *TOParameter) Create() (error, error, int) {
 	return api.GenericCreate(pa)
 }
 
+// Routes関数で「Handler: api.ReadHandler(&parameter.TOParameter{})」が指定されると呼ばれることになる。
 func (param *TOParameter) Read(h http.Header, useIMS bool) ([]interface{}, error, error, int, *time.Time) {
+
 	var maxTime time.Time
 	var runSecond bool
 	code := http.StatusOK
 	queryParamsToQueryCols := param.ParamColumns()
+
 	where, orderBy, pagination, queryValues, errs := dbhelpers.BuildWhereAndOrderByAndPagination(param.APIInfo().Params, queryParamsToQueryCols)
 	if len(errs) > 0 {
 		return nil, util.JoinErrs(errs), nil, http.StatusBadRequest, nil
 	}
+
+	// useIMSが有効の場合には、あらかじめIfModifiedSinceが
 	if useIMS {
 		runSecond, maxTime = ims.TryIfModifiedSinceQuery(param.APIInfo().Tx, h, queryValues, param.SelectMaxLastUpdatedQuery(where, orderBy, pagination, "parameter"))
 		if !runSecond {
@@ -162,6 +167,7 @@ func (param *TOParameter) Read(h http.Header, useIMS bool) ([]interface{}, error
 	} else {
 		log.Debugln("Non IMS request")
 	}
+
 	query := selectQuery() + where + ParametersGroupBy() + orderBy + pagination
 	rows, err := param.ReqInfo.Tx.NamedQuery(query, queryValues)
 	if err != nil {

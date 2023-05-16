@@ -60,16 +60,24 @@ func (cu CurrentUser) Can(permission string) bool {
 
 // MissingPermissions returns all of the passed Permissions that the user does
 // not have.
+// 引数で指定されたpermissionsに対して、カレントユーザーで不足しているパーミッション情報を返却します。十分なパーミッションを保持している場合には空スライスを応答します。
 func (cu CurrentUser) MissingPermissions(permissions ...string) []string {
+
 	var ret []string
+
+	// カレントユーザのRole名がAdminのRole名と一致したら、空を返す
 	if cu.RoleName == tc.AdminRoleName {
 		return ret
 	}
+
+	// 引数で指定されたパーミッション(permissions)の情報に対して、ユーザーのパーミッションとして保持していない場合にはretスライスに追加する。
 	for _, perm := range permissions {
 		if _, ok := cu.perms[perm]; !ok {
 			ret = append(ret, perm)
 		}
 	}
+
+	// 不足しているパーミッションを返す。ただし、Adminではない一般ユーザーで引数で指定されたパーミッションを全て保持していたら、空スライスがここで応答される。
 	return ret
 }
 
@@ -106,6 +114,7 @@ const CurrentUserKey key = iota
 
 // GetCurrentUserFromDB  - returns the id and privilege level of the given user along with the username, or -1 as the id, - as the userName and PrivLevelInvalid if the user doesn't exist, along with a user facing error, a system error to log, and an error code to return
 func GetCurrentUserFromDB(DB *sqlx.DB, user string, timeout time.Duration) (CurrentUser, error, error, int) {
+
 	invalidUser := CurrentUser{"-", -1, PrivLevelInvalid, TenantIDInvalid, -1, "", []string{}, "", nil}
 	if usersCacheIsEnabled() {
 		u, exists := getUserFromCache(user)

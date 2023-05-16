@@ -40,6 +40,7 @@ var GitRevision = "nogit"
 
 // この関数はt3c-applyから実行される
 func main() {
+
 	cfg, err := config.InitConfig(Version, GitRevision)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err.Error())
@@ -56,10 +57,12 @@ func main() {
 		cfg.TOTimeoutMS,
 		cfg.UserAgent(),
 	)
+
 	if err != nil {
 		log.Errorf("%s\n", err)
 		os.Exit(2)
 	}
+
 	if cfg.TCCfg.TOClient.FellBack() {
 		log.Warnln("Traffic Ops does not support the latest version supported by this app! Falling back to previous major Traffic Ops API version!")
 	}
