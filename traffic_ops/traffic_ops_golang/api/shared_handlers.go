@@ -561,20 +561,24 @@ func CreateHandler(creator Creator) http.HandlerFunc {
 					return
 				}
 			}
+
 			if len(objSlice) == 0 {
 				WriteRespAlert(w, r, tc.SuccessLevel, "No objects were provided in request.")
 				return
 			}
+
 			var (
 				responseObj interface{}
 				message     string
 			)
+
 			if len(objSlice) == 1 {
 				responseObj = objSlice[0]
 				message = objSlice[0].GetType() + " was created."
 			} else {
 				message = objSlice[0].GetType() + "s were created."
 			}
+
 			alerts := tc.CreateAlerts(tc.SuccessLevel, message)
 			if _, hasAlerts := objSlice[0].(AlertsResponse); hasAlerts {
 				for _, objElem := range objSlice {

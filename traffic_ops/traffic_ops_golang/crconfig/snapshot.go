@@ -109,6 +109,7 @@ WHERE c.name = $1
 		}
 		return "", false, errors.New("Error querying monitor snapshot: " + err.Error())
 	}
+
 	if !monitorSnapshot.Valid || monitorSnapshot.String == "{}" {
 		log.Errorln("Monitoring Snapshot didn't exist! Generating on-the-fly! This will cause race conditions in Traffic Monitor until a Snapshot is created!")
 		monitoringJSON, err := monitoring.GetMonitoringJSON(tx, cdn)
@@ -121,5 +122,6 @@ WHERE c.name = $1
 		}
 		return string(bts), true, nil
 	}
+
 	return monitorSnapshot.String, true, nil
 }

@@ -76,6 +76,8 @@ type GenericOptionsDeleter interface {
 
 // GenericCreate does a Create (POST) for the given GenericCreator object and type. This exists as a generic function, for the common use case of a single "id" key and a lastUpdated field.
 func GenericCreate(val GenericCreator) (error, error, int) {
+
+	// GenericCreatorというのは動的に変わる型と思われる
 	resultRows, err := val.APIInfo().Tx.NamedQuery(val.InsertQuery(), val)
 	if err != nil {
 		return ParseDBError(err)
@@ -101,11 +103,13 @@ func GenericCreate(val GenericCreator) (error, error, int) {
 		id = int(id.(int64))
 	default:
 	}
+
 	if rowsAffected == 0 {
 		return nil, errors.New(val.GetType() + " create: no " + val.GetType() + " was inserted, no id was returned"), http.StatusInternalServerError
 	} else if rowsAffected > 1 {
 		return nil, errors.New("too many ids returned from " + val.GetType() + " insert"), http.StatusInternalServerError
 	}
+
 	val.SetKeys(map[string]interface{}{"id": id})
 	val.SetLastUpdated(lastUpdated)
 	return nil, nil, http.StatusOK

@@ -36,6 +36,7 @@ type SetDSCPDotConfigOpts struct {
 }
 
 func MakeSetDSCPDotConfig(
+
 	fileName string,
 	server *Server,
 	opt *SetDSCPDotConfigOpts,
@@ -45,6 +46,7 @@ func MakeSetDSCPDotConfig(
 	}
 	warnings := []string{}
 
+	// CDNNameが存在しなければエラーでreturnする
 	if server.CDNName == nil {
 		return Cfg{}, makeErr(warnings, "server missing CDNName")
 	}
@@ -56,12 +58,14 @@ func MakeSetDSCPDotConfig(
 
 	text := makeHdrComment(opt.HdrComment)
 
+	// ファイル名のprefixから「set_dscp_」を除去、suffixから「.config」を除去した文字列が数字であるかどうかを確認する。
 	if _, err := strconv.Atoi(dscpNumStr); err != nil {
 		// TODO warn? We don't generally warn for client errors, because it can be an attack vector. Provide a more informative error return? Return a 404?
 		text = "An error occured generating the DSCP header rewrite file."
 		dscpNumStr = "" // emulates Perl
 	}
 
+	// 「set_dscp_xxx.config」とconfigFileに設定されている場合には下記の内容がそのファイルのコンテンツ情報となります。
 	text += `cond %{REMAP_PSEUDO_HOOK}` + "\n" + `set-conn-dscp ` + dscpNumStr + ` [L]` + "\n"
 
 	return Cfg{

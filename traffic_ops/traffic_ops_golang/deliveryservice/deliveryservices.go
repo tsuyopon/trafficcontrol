@@ -170,7 +170,10 @@ func CreateV31(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WriteRespAlertObj(w, r, tc.SuccessLevel, "Delivery Service creation was successful", []tc.DeliveryServiceV31{*res})
 }
+
+// 「jobs/? (POST)」で呼ばれるハンドラ
 func CreateV40(w http.ResponseWriter, r *http.Request) {
+
 	inf, userErr, sysErr, errCode := api.NewInfo(r, nil, nil)
 	if userErr != nil || sysErr != nil {
 		api.HandleErr(w, r, inf.Tx.Tx, errCode, userErr, sysErr)
@@ -183,11 +186,13 @@ func CreateV40(w http.ResponseWriter, r *http.Request) {
 		api.HandleErr(w, r, inf.Tx.Tx, http.StatusBadRequest, errors.New("decoding: "+err.Error()), nil)
 		return
 	}
+
 	res, status, userErr, sysErr := createV40(w, r, inf, ds, true)
 	if userErr != nil || sysErr != nil {
 		api.HandleErr(w, r, inf.Tx.Tx, status, userErr, sysErr)
 		return
 	}
+
 	alerts := res.TLSVersionsAlerts()
 	alerts.AddNewAlert(tc.SuccessLevel, "Delivery Service creation was successful")
 
@@ -262,6 +267,7 @@ func recreateTLSVersions(versions []string, dsid int, tx *sql.Tx) error {
 
 // create creates the given ds in the database, and returns the DS with its id and other fields created on insert set. On error, the HTTP status code, user error, and system error are returned. The status code SHOULD NOT be used, if both errors are nil.
 func createV40(w http.ResponseWriter, r *http.Request, inf *api.APIInfo, dsV40 tc.DeliveryServiceV40, omitExtraLongDescFields bool) (*tc.DeliveryServiceV40, int, error, error) {
+
 	user := inf.User
 	tx := inf.Tx.Tx
 	ds := tc.DeliveryServiceV4(dsV40)
@@ -1123,6 +1129,7 @@ func (v *TODeliveryService) DeleteQuery() string {
 }
 
 func readGetDeliveryServices(h http.Header, params map[string]string, tx *sqlx.Tx, user *auth.CurrentUser, useIMS bool) ([]tc.DeliveryServiceV4, error, error, int, *time.Time) {
+
 	if tx == nil {
 		return nil, nil, errors.New("nil transaction passed to readGetDeliveryServices"), http.StatusInternalServerError, nil
 	}
@@ -1778,6 +1785,7 @@ func MakeExampleURLs(protocol *int, dsType tc.DSType, routingName string, matchL
 }
 
 func GetDeliveryServicesMatchLists(dses []string, tx *sql.Tx) (map[string][]tc.DeliveryServiceMatch, error) {
+
 	// TODO move somewhere generic
 	q := `
 SELECT ds.xml_id as ds_name, t.name as type, r.pattern, COALESCE(dsr.set_number, 0)
@@ -1809,6 +1817,7 @@ ORDER BY dsr.set_number
 		m.Type = matchType
 		matches[dsName] = append(matches[dsName], m)
 	}
+
 	return matches, nil
 }
 
@@ -1832,18 +1841,22 @@ func EnsureParams(tx *sql.Tx, dsID int, xmlID string, edgeHeaderRewrite *string,
 
 // EnsureCacheURLParams ensures the given delivery service's cachrurl parameters exist on profiles of servers assigned to the delivery service.
 func EnsureCacheURLParams(tx *sql.Tx, dsID int, xmlID string, cacheURL *string) error {
+
 	configFile := "cacheurl_" + xmlID + ".config"
 	if cacheURL == nil || *cacheURL == "" {
 		return deleteLocationParam(tx, configFile)
 	}
+
 	locationParamID, err := ensureLocation(tx, configFile)
 	if err != nil {
 		return err
 	}
 	return createDSLocationProfileParams(tx, locationParamID, dsID)
+
 }
 
 func ensureHeaderRewriteParams(tx *sql.Tx, dsID int, xmlID string, hdrRW *string, tier tierType, dsType tc.DSType, maxOriginConns *int) error {
+
 	configFile := "hdr_rw_" + xmlID + ".config"
 	if tier == midTier {
 		configFile = "hdr_rw_mid_" + xmlID + ".config"
@@ -1974,13 +1987,18 @@ func deleteLocationParam(tx *sql.Tx, configFile string) error {
 // is nil.
 // This will panic if the transaction is nil.
 func getTenantID(tx *sql.Tx, ds *tc.DeliveryServiceV4) (*int, error) {
+
+	//DeliveryServiceが無い または 識別子(DS IDとXMLIDが共に存在しない)
 	if ds == nil || (ds.ID == nil && ds.XMLID == nil) {
 		return nil, errors.New("delivery service was nil, or had nil identifiers (ID and XMLID)")
 	}
+
+	// DS IDが指定されていれば、DS IDからTenantIDを取得する
 	if ds.ID != nil {
 		existingID, _, err := getDSTenantIDByID(tx, *ds.ID) // ignore exists return - if the DS is new, we only need to check the user input tenant
 		return existingID, err
 	}
+
 	existingID, _, err := getDSTenantIDByName(tx, tc.DeliveryServiceName(*ds.XMLID)) // ignore exists return - if the DS is new, we only need to check the user input tenant
 	return existingID, err
 }
@@ -1989,13 +2007,16 @@ func isTenantAuthorized(inf *api.APIInfo, ds *tc.DeliveryServiceV4) (bool, error
 	tx := inf.Tx.Tx
 	user := inf.User
 
+	
 	existingID, err := getTenantID(inf.Tx.Tx, ds)
 	if err != nil {
 		return false, errors.New("getting tenant ID: " + err.Error())
 	}
+
 	if ds.TenantID == nil {
 		ds.TenantID = existingID
 	}
+
 	if existingID != nil && existingID != ds.TenantID {
 		userAuthorizedForExistingDSTenant, err := tenant.IsResourceAuthorizedToUserTx(*existingID, user, tx)
 		if err != nil {
@@ -2005,6 +2026,7 @@ func isTenantAuthorized(inf *api.APIInfo, ds *tc.DeliveryServiceV4) (bool, error
 			return false, nil
 		}
 	}
+
 	if ds.TenantID != nil {
 		userAuthorizedForNewDSTenant, err := tenant.IsResourceAuthorizedToUserTx(*ds.TenantID, user, tx)
 		if err != nil {
@@ -2014,23 +2036,31 @@ func isTenantAuthorized(inf *api.APIInfo, ds *tc.DeliveryServiceV4) (bool, error
 			return false, nil
 		}
 	}
+
 	return true, nil
 }
 
 // getDSTenantIDByID returns the tenant ID, whether the delivery service exists, and any error.
+// 引数として渡されたDS IDからテナントIDを取得する
 func getDSTenantIDByID(tx *sql.Tx, id int) (*int, bool, error) {
+
 	tenantID := (*int)(nil)
+
+	// DS IDからテナントIDを取得する
 	if err := tx.QueryRow(`SELECT tenant_id FROM deliveryservice where id = $1`, id).Scan(&tenantID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("querying tenant ID for delivery service ID '%v': %v", id, err)
 	}
+
 	return tenantID, true, nil
 }
 
 // getDSTenantIDByName returns the tenant ID, whether the delivery service exists, and any error.
+// xml_id (例: demo1, demo2) の値を引数で指定することによって、そのTenantIDを取得する
 func getDSTenantIDByName(tx *sql.Tx, ds tc.DeliveryServiceName) (*int, bool, error) {
+
 	tenantID := (*int)(nil)
 	if err := tx.QueryRow(`SELECT tenant_id FROM deliveryservice where xml_id = $1`, ds).Scan(&tenantID); err != nil {
 		if err == sql.ErrNoRows {
@@ -2042,7 +2072,9 @@ func getDSTenantIDByName(tx *sql.Tx, ds tc.DeliveryServiceName) (*int, bool, err
 }
 
 // GetXMLID loads the DeliveryService's xml_id from the database, from the ID. Returns whether the delivery service was found, and any error.
+// DS IDの値を引数で指定することによって、そのDS IDに紐づくxml_id (例: demo1, demo2) の値を取得する
 func GetXMLID(tx *sql.Tx, id int) (string, bool, error) {
+
 	xmlID := ""
 	if err := tx.QueryRow(`SELECT xml_id FROM deliveryservice where id = $1`, id).Scan(&xmlID); err != nil {
 		if err == sql.ErrNoRows {
@@ -2115,6 +2147,8 @@ func sanitize(ds *tc.DeliveryServiceV4) {
 
 // SelectDeliveryServicesQuery is a PostgreSQL query used to fetch Delivery
 // Services from the Traffic Ops Database.
+
+// TBD: 下記のSQLで「::::」の箇所がパースエラーになるので確認したい
 const SelectDeliveryServicesQuery = `
 SELECT
 ds.active,
@@ -2401,6 +2435,7 @@ RETURNING id, last_updated
 `
 }
 
+// 上にあるinsertQuery()と比較して、この関数で応答するSQL文はdeliveryserviceへのINSERTだが、long_desc_1とlong_desc_2の値を明示的に指定していない。
 func insertQueryWithoutLD1AndLD2() string {
 	return `
 INSERT INTO deliveryservice (

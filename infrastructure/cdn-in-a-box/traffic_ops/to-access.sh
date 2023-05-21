@@ -69,7 +69,9 @@ cookie_current() {
 }
 
 to-auth() {
+
 	# These are required
+	# $TO_URL, $TO_USER, $TO_PASSWORDが設定されていなければ、エラーにする
 	if [[ -z $TO_URL || -z $TO_USER || -z $TO_PASSWORD ]]; then
 		echo TO_URL TO_USER TO_PASSWORD must all be set
 		return 1
@@ -78,6 +80,7 @@ to-auth() {
 	# if cookiejar is current, nothing to do..
 	cookie_current $COOKIEJAR && return
 
+	# 認証用のcookie情報を取得するために「/api/3.0/user/login (POST)」にアクセスします。
 	local url=$TO_URL/api/$TO_API_VERSION/user/login
 	local datatype='Accept: application/json'
 	cat >"$login" <<-CREDS
@@ -91,50 +94,72 @@ CREDS
 }
 
 tv-ping() {
+	# 認証が必要なエンドポイント「/api/3.0/vault/ping (GET)」へとアクセスします
 	to-auth && \
 		curl $CURLAUTH $CURLOPTS --cookie "$COOKIEJAR" -X GET "$TO_URL/api/$TO_API_VERSION/vault/ping"
 }
 
 to-ping() {
 	# ping endpoint does not require authentication
+	# 認証が不要なエンドポイント「/api/3.0/ping (GET)」へとアクセスします
 	curl $CURLAUTH $CURLOPTS -X GET "$TO_URL/api/$TO_API_VERSION/ping"
 }
 
 to-get() {
+	# 認証が必要な引数で指定されたエンドポイントに対してGETメソッドでアクセスします
 	to-auth && \
 		curl $CURLAUTH $CURLOPTS --cookie "$COOKIEJAR" -X GET "$TO_URL/$1"
 }
 
+# POSTエンドポイントへのリクエストを送る
+# $1にはエンドポイントが、$2には「--data=」に指定されるPOSTのボディが指定される。$2は空、ファイル名指定、文字列指定の3種類に対応している
 to-post() {
+
 	local t
 	local data
+
 	if [[ -z "$2" ]]; then
+		# $2が指定されない場合
 		data=()
 	elif [[ -f "$2" ]]; then
+		# $2で指定された値がファイルの場合
 		data=(--data "@${2}")
 	else
+		# $2に文字列が指定された場合には、mktempでファイル名を用意してそこに記述して、「--data」にはmktempのファイル名を指定する
 		t=$(mktemp)
 		echo "$2" >$t
 		data=(--data "@${t}")
 	fi
+
+	# 認証が必要な引数で指定されたエンドポイントに対してPOSTメソッドでアクセスします
 	to-auth && \
 	    curl $CURLAUTH $CURLOPTS -H 'Content-Type: application/json;charset=UTF-8' --cookie "$COOKIEJAR" -X POST "${data[@]}" "$TO_URL/$1"
 	[[ -n $t ]] && rm -f "$t"
 }
 
+# PUTエンドポイントへのリクエストを送る
 to-put() {
+
 	if [[ $# -lt 2 || -z "$2" ]]; then
+		# 引数が2つよりも小さい または $2がゼロバイトの場合にはPUT時に指定するボディは空とする
 		data=()
 	elif [[ -f "$2" ]]; then
+		# $2がファイルの場合には、そのまま「--data @<file>」として指定する
 		data=(--data "@${2}")
 	else
+		# $2がそれ以外の文字列でコマンドライン上で指定する
 		data=(--data "${2}")
 	fi
+
+	# 認証が必要なPUTエンドポイントへとリクエストする
 	to-auth && \
 	    curl $CURLAUTH $CURLOPTS --cookie "$COOKIEJAR" -X PUT "${data[@]}" "$TO_URL/$1"
 }
 
+# DELETEエンドポイントへのリクエストを送る
+# $1にはエンドポイントが指定されます
 to-delete() {
+	# 認証が必要なDELETEエンドポイントへとリクエストする
 	to-auth && \
 		curl $CURLAUTH $CURLOPTS --cookie "$COOKIEJAR" -X DELETE "$TO_URL/$1"
 }
@@ -152,6 +177,7 @@ to-enroll() {
 	sync
 
 	# Wait for the initial data load to be copied
+	# 下記のinitial-load-doneはTrafficOpsによりtraffic_ops/trafficops-init.sh中でtouchして生成されます
 	until [[ -f "$ENROLLER_DIR/initial-load-done" ]] ; do
 		echo "Waiting for enroller initial data load to complete...."
 		sleep 2
@@ -348,20 +374,58 @@ to-add-sslkeys() {
 # args:
 #     expected_servers - should be a comma delimited list of expected docker service names to be enrolled
 #     cdn_name
+#
+# TrafficOpsから起動される。
+# 「to-auto-snapqueue "$AUTO_SNAPQUEUE_SERVERS" "$CDN_NAME"」として起動される
+#  上記はCIABでは「to-auto-snapqueue "trafficops,trafficmonitor,trafficrouter,edge,mid-01,mid-02" "CDN-in-a-Box"」としてデフォルトでは指定されます。
 to-auto-snapqueue() {
+
 	while true; do
+
 		# AUTO_SNAPQUEUE_SERVERS should be a comma delimited list of expected docker service names to be enrolled - see varibles.env
+
+		# (例) $ echo "trafficops,trafficmonitor,trafficrouter,edge,mid-01,mid-02" | tr ',' '\n' | jq -R . | jq -M -c -e -s '.|sort'
+		#      ["edge","mid-01","mid-02","trafficmonitor","trafficops","trafficrouter"]
 		expected_servers_json=$(echo "$1" | tr ',' '\n' | jq -R . | jq -M -c -e -s '.|sort')
+
+		# (例) $ jq -r -n --argjson expected '["edge","mid-01","mid-02","trafficmonitor","trafficops","trafficrouter"]' '$expected|join(",")'
+		#      edge,mid-01,mid-02,trafficmonitor,trafficops,trafficrouter
 		expected_servers_list=$(jq -r -n --argjson expected "$expected_servers_json" '$expected|join(",")')
+
+		# (例) $ jq -r -n --argjson expected '["edge","mid-01","mid-02","trafficmonitor","trafficops","trafficrouter"]' '$expected|length'
+		#      6
 		expected_servers_total=$(jq -r -n --argjson expected "$expected_servers_json" '$expected|length')
 
+		# 「api/3.0/servers(GET)」ヘとアクセスする
+		# サンプル出力
+		# (例) $ curl -k "https://localhost/api/3.0/servers" -b ./cookie.txt | jq -c -e '[.response[] | .hostName] | sort'
+		#      ["edge","enroller","influxdb","mid-01","mid-02","origin","trafficmonitor","trafficops"]
 		current_servers_json=$(to-get 'api/'$TO_API_VERSION'/servers' 2>/dev/null | jq -c -e '[.response[] | .hostName] | sort')
+
+		# $current_servers_jsonがゼロバイトならば current_servers_jsonを[]として扱う
 		[ -z "$current_servers_json" ] && current_servers_json='[]'
+
+		# (例) $ jq -r -n --argjson current '["edge","enroller","influxdb","mid-01","mid-02","origin","trafficmonitor","trafficops"]' '$current|join(",")'
+		#      edge,enroller,influxdb,mid-01,mid-02,origin,trafficmonitor,trafficops
 		current_servers_list=$(jq -r -n --argjson current "$current_servers_json" '$current|join(",")')
+
+		# (例)$ jq -r -n --argjson current '["edge","enroller","influxdb","mid-01","mid-02","origin","trafficmonitor","trafficops"]' '$current|length'
+		#     8
 		current_servers_total=$(jq -r -n --argjson current "$current_servers_json" '$current|length')
 
+		# expectedに指定した値から、currrentのものを差し引いて残ったコンポーネントを表示している
+		# (例) $ jq -n --argjson expected '["edge","mid-01","mid-02","trafficmonitor","trafficops","trafficrouter"]' --argjson current '["edge","enroller","influxdb","mid-01","mid-02","origin","trafficmonitor","trafficops"]' '$expected-$current'
+		#      [
+		#        "trafficrouter"
+		#      ]
 		remain_servers_json=$(jq -n --argjson expected "$expected_servers_json" --argjson current "$current_servers_json" '$expected-$current')
+
+		# (例) $ jq -r -n --argjson remain '["trafficrouter"]' '$remain|join(",")'
+		#      trafficrouter
 		remain_servers_list=$(jq -r -n --argjson remain "$remain_servers_json" '$remain|join(",")')
+
+		# (例) $ jq -r -n --argjson remain '["trafficrouter"]' '$remain|length'
+		#      1
 		remain_servers_total=$(jq -r -n --argjson remain "$remain_servers_json" '$remain|length')
 
 		echo "AUTO-SNAPQUEUE - Expected Servers ($expected_servers_total): $expected_servers_list"
@@ -369,19 +433,43 @@ to-auto-snapqueue() {
 		echo "AUTO-SNAPQUEUE - Remain Servers ($remain_servers_total): $remain_servers_list"
 
 		if ((remain_servers_total == 0)) ; then
+
 			echo "AUTO-SNAPQUEUE - All expected servers enrolled."
+
+			# デフォルトで2秒待つ
 			sleep $AUTO_SNAPQUEUE_ACTION_WAIT
+
 			echo "AUTO-SNAPQUEUE - Do automatic snapshot..."
+
+			# 「api/3.0/cdns?name=CDN-in-a-Box (GET)」が実行される
+			# 以下、サンプル
+			# $ curl -k "https://localhost/api/3.0/cdns?name=CDN-in-a-Box" -b ./cookie.txt
+			# {"response":[{"dnssecEnabled":false,"domainName":"mycdn.ciab.test","id":2,"lastUpdated":"2023-05-06 23:32:42+00","name":"CDN-in-a-Box"}]}
+			# $ curl -s -k "https://localhost/api/3.0/cdns?name=CDN-in-a-Box" -b ./cookie.txt |jq '.response[0].id'
+			# 2
 			cdn_id=$(to-get "api/$TO_API_VERSION/cdns?name=$2" |jq '.response[0].id')
+
+			# 「api/3.0/snapshot?cdnID=<cdn_id> (PUT)が実行される。ここでsnapshotが実行されているものと思われる
+			# (サンプル)$ curl -s -k "https://localhost/api/3.0/snapshot?cdnID=2" -b ./cookie.txt -X PUT
+			#           {"response":"SUCCESS"}
 			to-put "api/$TO_API_VERSION/snapshot?cdnID=$cdn_id"
+
+			# デフォルトで2秒待つ
 			sleep $AUTO_SNAPQUEUE_ACTION_WAIT
+
 			echo "AUTO-SNAPQUEUE - Do queue updates..."
+
+			# 「api/3.0/cdns/<cdn_id>/queue_update (POST)」として指定される。
+			# ここでQueue Updateが実行されていて、これが実行されるとキャッシュサーバ側のt3c applyで更新処理が走るようになる。
 			to-post "api/$TO_API_VERSION/cdns/$cdn_id/queue_update" '{"action":"queue"}'
 			break
 		fi
 
+		# デフォルトは2秒sleepする
 		sleep $AUTO_SNAPQUEUE_POLL_INTERVAL
+
 	done
+
 }
 
 check-skips() {
