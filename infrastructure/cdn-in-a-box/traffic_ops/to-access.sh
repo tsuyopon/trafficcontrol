@@ -185,6 +185,7 @@ to-enroll() {
 	done
 
 	# Wait for the Enroller servers directory to be created
+	# このディレクトリ自体はenrollerが enroller/enroller.goのwatch()関数によってwatchとして登録した際に生成される。
 	until [[ -d "${ENROLLER_DIR}/servers" ]] ; do
 		echo "Waiting for ${ENROLLER_DIR}/servers ..."
 		sleep 2
@@ -192,6 +193,7 @@ to-enroll() {
 	done
 
 	# If the servers dir vanishes, the docker shared volume isn't working right
+	# もし /shared/enroller/serversがディレクトリではない場合には、何かおかしなことが起こっているので処理を終了する
 	if [[ ! -d ${ENROLLER_DIR}/servers ]]; then
 		echo "ERROR: ${ENROLLER_DIR}/servers not found -- contents:"
 		find ${ENROLLER_DIR} -ls

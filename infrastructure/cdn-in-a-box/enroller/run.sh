@@ -72,6 +72,7 @@ fi;
 "${enroller_command[@]}" &
 
 source /to-access.sh
+
 # Enroll with traffic ops
 TO_URL="https://$TO_FQDN:$TO_PORT"
 to-enroll enroller ALL '' 53 || (while true; do echo "enroll failed."; sleep 3 ; done)

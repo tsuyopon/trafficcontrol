@@ -1279,6 +1279,7 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 				}
 
 				// rename the file indicating if processed or rejected
+				// suffixに「.processed」か「.rejected」を付与する
 				err = os.Rename(event.Name, event.Name+suffix)
 				if err != nil {
 					log.Infof("error renaming %s to %s: %s\n", event.Name, event.Name+suffix, err.Error())
