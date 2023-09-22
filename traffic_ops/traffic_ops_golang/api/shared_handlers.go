@@ -149,6 +149,8 @@ type deleteSuccessWriterFunc func(w http.ResponseWriter, r *http.Request, messag
 //      produces the proper status code based on the error code returned
 //      marshals the structs returned into the proper response json
 func ReadHandler(reader Reader) http.HandlerFunc {
+
+	// 引数readerで指定された型に応じてレスポンスを分けているものと思われる。
 	return readHandlerHelper(
 		reader,
 		HandleErr,
@@ -179,8 +181,12 @@ func DeprecatedReadHandler(reader Reader, alternative *string) http.HandlerFunc 
 // handling and success handling. For instance, ReadHandler and DeprecatedReadHandler should be exactly the same, except that
 // DeprecatedReadHandler always returns a deprecation alert in its response, whereas ReadHandler does not.
 func readHandlerHelper(reader Reader, errHandler errWriterFunc, successHandler readSuccessWriterFunc) http.HandlerFunc {
+
 	return func(w http.ResponseWriter, r *http.Request) {
+
 		useIMS := false
+
+		// traffic_ops_golang/api/api.goのNewInfoが呼ばれます
 		inf, userErr, sysErr, errCode := NewInfo(r, nil, nil)
 		if userErr != nil || sysErr != nil {
 			errHandler(w, r, inf.Tx.Tx, errCode, userErr, sysErr)
@@ -188,33 +194,56 @@ func readHandlerHelper(reader Reader, errHandler errWriterFunc, successHandler r
 		}
 		defer inf.Close()
 
+		// reflect.ValueOfで動的に型の情報を取得する (go言語のreflectionを利用しています)
 		interfacePtr := reflect.ValueOf(reader)
+
+		// interfacePtr.Kind()を使用して、interfacePtrの種類（Kind）を取得します。この場合、interfacePtrはポインタ型であることが期待されています。
 		if interfacePtr.Kind() != reflect.Ptr {
 			errHandler(w, r, inf.Tx.Tx, http.StatusInternalServerError, nil, errors.New("reflect: can only indirect from a pointer"))
 			return
 		}
+
+		// オブジェクトの型情報を取得します。これは、オブジェクトの具体的な型（structなど）を表すreflect.Type型の値を返します。
 		objectType := reflect.Indirect(interfacePtr).Type()
+
+		// objectTypeに対応する新しいオブジェクトのポインタを作成します。この新しいオブジェクトはReaderインターフェースを実装していることが期待されます。
 		obj := reflect.New(objectType).Interface().(Reader)
+
+		// objのメソッド（SetInfo）を実行します。traffic_ops_golang/api/api.goのSetInfo()が呼ばれます
 		obj.SetInfo(inf)
 
+		// ここで保存されている値を取得します
 		cfg, err := GetConfig(r.Context())
 		if err != nil {
 			log.Warnf("Couldnt get the config %v", err)
 		}
+
+		// 設定が取得できたら、IfModifiedSinceヘッダも付与するかどうかを表す `json:use_ims` の値をフラグとして取得する
+		// TODO: 上記文言が間違っていないか再確認
 		if cfg != nil {
 			useIMS = cfg.UseIMS
 		}
+
+		// 「obj.Read」のobjはリフレクションにより型が決まります。つまり、呼び出し元で指定される型によって呼ばれるソースコードが変わります。
+		//
+		// 例えば、URLエンドポイントと関数のマッピングを指定するRoutes関数から 「Handler: api.ReadHandler(&parameter.TOParameter{})」となっている場合には、
+		// "obj"はtraffic_ops/traffic_ops_golang/parameter/parameters.go中のTOParameterレシーバとして定義されたRead関数が呼ばれます。
 		results, userErr, sysErr, errCode, maxTime := obj.Read(r.Header, useIMS)
 		if userErr != nil || sysErr != nil {
 			errHandler(w, r, inf.Tx.Tx, errCode, userErr, sysErr)
 			return
 		}
+
 		if maxTime != nil && SetLastModifiedHeader(r, useIMS) {
 			date := maxTime.Format(rfc.LastModifiedFormat)
 			w.Header().Add(rfc.LastModified, date)
 		}
+
+		// 成功した時のレスポンスを行う
 		successHandler(w, r, errCode, results)
+
 	}
+
 }
 
 // UpdateHandler creates a handler function from the pointer to a struct implementing the Updater interface
@@ -532,20 +561,24 @@ func CreateHandler(creator Creator) http.HandlerFunc {
 					return
 				}
 			}
+
 			if len(objSlice) == 0 {
 				WriteRespAlert(w, r, tc.SuccessLevel, "No objects were provided in request.")
 				return
 			}
+
 			var (
 				responseObj interface{}
 				message     string
 			)
+
 			if len(objSlice) == 1 {
 				responseObj = objSlice[0]
 				message = objSlice[0].GetType() + " was created."
 			} else {
 				message = objSlice[0].GetType() + "s were created."
 			}
+
 			alerts := tc.CreateAlerts(tc.SuccessLevel, message)
 			if _, hasAlerts := objSlice[0].(AlertsResponse); hasAlerts {
 				for _, objElem := range objSlice {

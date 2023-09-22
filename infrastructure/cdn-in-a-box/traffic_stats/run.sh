@@ -43,6 +43,7 @@ insert-self-into-dns.sh
 source /to-access.sh
 
 # Wait on SSL certificate generation
+# X509_CA_ENV_FILE = /shared/ssl/environment ファイルが生成されるまで待つ (これはTrafficOpsによって生成される)
 until [[ -f "$X509_CA_ENV_FILE" ]]
 do
   echo "Waiting on Shared SSL certificate generation"
@@ -50,6 +51,7 @@ do
 done
 
 # Source the CIAB-CA shared SSL environment
+# X509_GENERATION_COMPLETEの環境変数は、traffic_ops/run-go.shの中でechoして直接して設定される
 until [[ -n "$X509_GENERATION_COMPLETE" ]]
 do
   echo "Waiting on X509 vars to be defined"
@@ -63,13 +65,17 @@ update-ca-trust extract
 
 # Enroll with traffic ops
 TSCONF=/opt/traffic_stats/conf/traffic_stats.cfg
+
+# TrafficStatsをenrollする
 to-enroll ts ALL || (while true; do echo "enroll failed."; sleep 3 ; done)
 
+# TOのAPI /api/3.0/ping へとアクセスできるようになるまで待ちます
 while ! to-ping 2>/dev/null; do
   echo "waiting for trafficops ($TO_URL)..."
   sleep 3
 done
 
+# /opt/traffic_stats/conf/traffic_stats.cfgを生成します
 cat <<-EOF >$TSCONF
 {
 	"toUser": "$TO_ADMIN_USER",
@@ -90,6 +96,8 @@ cat <<-EOF >$TSCONF
 }
 EOF
 
+# /opt/traffic_stats/conf/traffic_stats_seelog.xmlを生成します
+# seelogというのはロギングフレームワークです: https://github.com/cihub/seelog
 cat <<-EOF >/opt/traffic_stats/conf/traffic_stats_seelog.xml
 <?xml version='1.0'?>
 <seelog minlevel="debug">
@@ -99,22 +107,29 @@ cat <<-EOF >/opt/traffic_stats/conf/traffic_stats_seelog.xml
 </seelog>
 EOF
 
+# ログ出力用でtouchする。このファイルはrun.shで最後にtail -fされています。
+# traffic_stats/traffic_stats_seelog.xmlでは下記のログが指定されています。
 touch /opt/traffic_stats/var/log/traffic_stats/traffic_stats.log
 
 # Wait for influxdb
+# influxdbのポートにアクセスできるようになるまで待つ
 until nc $INFLUXDB_HOST $INFLUXDB_PORT </dev/null >/dev/null 2>&1; do
   echo "Waiting for influxdb to start..."
   sleep 3
 done
 
+# traffic_stats/influxdb_tools/create/create_ts_databases.go が実行される
+# InfluxDB用の初期設定が投入される
 /opt/traffic_stats/influxdb_tools/create_ts_databases -user $INFLUXDB_ADMIN_USER -password $INFLUXDB_ADMIN_PASSWORD -url http://$INFLUXDB_HOST:$INFLUXDB_PORT -replication 1
 
 # Wait for traffic monitor
+# TrafficMonitorのTM_PORTポート(80)にアクセスできるようになるまで待つ
 until nc $TM_FQDN $TM_PORT </dev/null >/dev/null 2>&1; do
   echo "Waiting for Traffic Monitor to start..."
   sleep 3
 done
 
+# traffic_statsを実行します
 traffic_stats_command=(/opt/traffic_stats/bin/traffic_stats -cfg $TSCONF);
 if [[ "$TS_DEBUG_ENABLE" == true ]]; then
   dlv '--continue' '--listen=:2346' '--accept-multiclient=true' '--headless=true' '--api-version=2' exec \
@@ -123,5 +138,7 @@ else
   "${traffic_stats_command[@]}" &
 fi;
 
+# コンテナが終了しないようにtail -fします
+# traffic_stats/traffic_stats_seelog.xmlでは下記のログが指定されています。
 exec tail -f /opt/traffic_stats/var/log/traffic_stats/traffic_stats.log
 

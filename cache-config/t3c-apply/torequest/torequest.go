@@ -254,7 +254,8 @@ func (r *TrafficOpsReq) checkConfigFile(cfg *ConfigFile, filesAdding []string) e
 	cfg.ChangeNeeded = changeNeeded
 	cfg.AuditComplete = true
 
-	// ファイル名が50-ats.rulesの場合にだけはr.processUdevRulesを実行する。
+	// ファイル名が50-ats.rulesの場合にだけはr.processUdevRulesを実行する。(歴史的経緯により存在しているらしく、通常は気にする必要はないらしい)
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/overview/profiles_and_parameters.html#ats-rules
 	if cfg.Name == "50-ats.rules" {
 		err := r.processUdevRules(cfg)
 		if err != nil {
@@ -975,6 +976,7 @@ func (r *TrafficOpsReq) ProcessConfigFiles() (UpdateStatus, error) {
 // and determines which need to be installed or removed on the cache.
 func (r *TrafficOpsReq) ProcessPackages() error {
 	log.Infoln("Calling ProcessPackages")
+
 	// get the package list for this cache from Traffic Ops. 
 	// t3c-request --get-data=packagesの実行してTrafficOpsからこのサーバで取得するパッケージリストを取得する
 	pkgs, err := getPackages(r.Cfg)

@@ -73,7 +73,9 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 	private Path databasesDirectory;
 
 	public AbstractUpdatable stateHandler = new AbstractUpdatable() {
+
 		public String toString() {return "status listener";}
+
 		@Override
 		public synchronized boolean update(final String jsonStr) {
 			try {
@@ -86,6 +88,7 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 			}
 			return false;
 		}
+
 		@Override
 		public boolean noChange() {
 			try {
@@ -107,9 +110,15 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 		}
 	}
 
+	// ここが「public static void main」のjavaの起点に相当する部分だと思われます。
+	// see: https://github.com/Comcast/traffic_control/issues/432
+
 	@SuppressWarnings("PMD.CyclomaticComplexity")
 	public void init() {
+
 		final AbstractUpdatable crHandler = new AbstractUpdatable() {
+
+			// PeriodicResourceUpdater.java中のputCurrentから呼ばれる
 			@Override
 			public boolean update(final String configStr) {
 				try {
@@ -124,7 +133,9 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 
 				return false;
 			}
+
 			public String toString() {return "config listener";}
+
 			@Override
 			public boolean noChange() {
 				try {
@@ -150,6 +161,7 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 
 		processConfig();
 
+		// 以下の2つは定期実行用のクラスらしい。
 		crUpdater = new PeriodicResourceUpdater(crHandler, new TrafficMonitorResourceUrl(this, configUrl), databasesDirectory.resolve(configFile).toString(), configRefreshPeriod, true);
 		crUpdater.init();
 
@@ -157,6 +169,8 @@ public class TrafficMonitorWatcher implements ApplicationListener<ApplicationCon
 		stateUpdater.init();
 	}
 
+	// ApplicationListener<ApplicationContextEvent>クラスを継承していると、onApplicationEventの実装が必要
+	// イベントがあれば通知されてくる。
 	@Override
 	public void onApplicationEvent(final ApplicationContextEvent event) {
 		if (event instanceof ContextClosedEvent) {

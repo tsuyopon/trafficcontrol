@@ -33,13 +33,22 @@ const (
 
 // CreateProfile creates the passed Profile.
 func (to *Session) CreateProfile(pl tc.Profile, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
+
+	// CDNIDが0か空でない場合にだけ下記のif文中のコードパスが実行される
 	if pl.CDNID == 0 && pl.CDNName != "" {
+
+		// /api/4.0/cdns?name=<pl.CDNName> (GET)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/cdns.html#get
 		cdnOpts := NewRequestOptions()
 		cdnOpts.QueryParameters.Set("name", pl.CDNName)
 		cdns, _, err := to.GetCDNs(cdnOpts)
+
+		// APIの取得にエラーの場合
 		if err != nil {
 			return tc.Alerts{}, toclientlib.ReqInf{}, fmt.Errorf("resolving Profile's CDN Name '%s' to an ID: %w", pl.CDNName, err)
 		}
+
+		// APIからのレスポンスが0件の場合には、エラーとする
 		if len(cdns.Response) == 0 {
 			return tc.Alerts{
 					Alerts: []tc.Alert{
@@ -52,16 +61,25 @@ func (to *Session) CreateProfile(pl tc.Profile, opts RequestOptions) (tc.Alerts,
 				toclientlib.ReqInf{},
 				fmt.Errorf("no CDN with name %s", pl.CDNName)
 		}
+
+		// APIからのID取得した値をpl.CDNIDに格納する
 		pl.CDNID = cdns.Response[0].ID
 	}
 
 	var alerts tc.Alerts
+
+	// 下記でProfileの新規作成を行う
+	// /api/4.0/profiles (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#post
 	reqInf, err := to.post(apiProfiles, opts, pl, &alerts)
 	return alerts, reqInf, err
+
 }
 
 // UpdateProfile replaces the Profile identified by ID with the one provided.
 func (to *Session) UpdateProfile(id int, pl tc.Profile, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
+	// /profiles/<id> (PUT)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles_id.html#put
 	route := fmt.Sprintf("%s/%d", apiProfiles, id)
 	var alerts tc.Alerts
 	reqInf, err := to.put(route, opts, pl, &alerts)
@@ -80,12 +98,15 @@ func (to *Session) GetParametersByProfileName(profileName string, opts RequestOp
 // GetProfiles returns all Profiles stored in Traffic Ops.
 func (to *Session) GetProfiles(opts RequestOptions) (tc.ProfilesResponse, toclientlib.ReqInf, error) {
 	var data tc.ProfilesResponse
+	// /api/4.0/profiles (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#get
 	reqInf, err := to.get(apiProfiles, opts, &data)
 	return data, reqInf, err
 }
 
 // DeleteProfile deletes the Profile with the given ID.
 func (to *Session) DeleteProfile(id int, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
+	// /api/4.0/profiles (DELETE)
 	URI := fmt.Sprintf("%s/%d", apiProfiles, id)
 	var alerts tc.Alerts
 	reqInf, err := to.del(URI, opts, &alerts)

@@ -17,13 +17,29 @@
  * under the License.
  */
 
+
+// ファイル文字列や正規表現によるファイルパターンに対して、ファイルの内容の書き換え編集操作を行います。
+// see: https://www.npmjs.com/package/grunt-string-replace
 module.exports = {
+
 		files: {
+
+			// expand=trueを指定することで、下記のcwd, dest, srcなどのオプション群が指定できるようになる。
+			//   cf. https://gruntjs.com/configuring-tasks#building-the-files-object-dynamically
 			expand: true,
+
+			// cwdとdestが同じであることに注意(つまり、入力と出力が同じと思われる)
 			cwd: '<%= globalConfig.distdir %>/public',
+
+			// 出力先パス
 			dest: '<%= globalConfig.distdir %>/public',
+
+			// index.html
 			src: 'index.html',
 		},
+
+		// 書き換えるファイルパターンとその置換後の文字列
+		// 主にlink relやscriptタグなどで「?built=<Date.now()>」のクエリストリングを付与する目的で利用される。
 		options: {
 			replacements: [
 				{

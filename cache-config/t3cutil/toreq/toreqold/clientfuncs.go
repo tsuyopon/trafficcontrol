@@ -279,22 +279,32 @@ func (cl *TOClient) GetTopologies() ([]tc.Topology, toclientlib.ReqInf, error) {
 }
 
 func (cl *TOClient) GetConfigFileParameters(configFile string) ([]tc.Parameter, toclientlib.ReqInf, error) {
+
 	params := []tc.Parameter{}
 	reqInf := toclientlib.ReqInf{}
+
+	// 第２引数の値はただのログ出力用。重要なのは第４引数の無名関数です
 	err := torequtil.GetRetry(cl.NumRetries, "config_file_"+configFile+"_parameters", &params, func(obj interface{}) error {
+
+		// /parameters?configFile=<configFile> (GET)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 		toParams, toReqInf, err := cl.c.GetParameterByConfigFile(configFile)
 		if err != nil {
 			return errors.New("getting delivery services from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}
+
 		params := obj.(*[]tc.Parameter)
 		*params = toParams
 		reqInf = toReqInf
 		return nil
 	})
+
 	if err != nil {
 		return nil, reqInf, errors.New("getting parent.config parameters: " + err.Error())
 	}
+
 	return params, reqInf, nil
+
 }
 
 func (cl *TOClient) GetCDN(cdnName tc.CDNName) (tc.CDN, toclientlib.ReqInf, error) {

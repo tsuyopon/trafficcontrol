@@ -114,6 +114,8 @@ mkdir /tmp/trafficcontrol-cache-config
 
 # hostname is already defined in /etc/init.d/99-run.sh
 hostname="${hostname//-/_}" # replace - with _
+
+# 下記はhostnameの値をuppercase(大文字)に変換するものです
 hostname="${hostname^^}" # uppercase
 debug_variable_name="T3C_DEBUG_COMPONENT_${hostname}"
 debug_binary="${!debug_variable_name}"
@@ -121,7 +123,9 @@ if ! type -p "$debug_binary"; then
 	t3c apply --run-mode=badass --traffic-ops-url="$TO_URL" --traffic-ops-user="$TO_USER" --traffic-ops-password="$TO_PASSWORD" --git=yes -vv || { echo "Failed"; }
 fi
 
+# /etc/cron.d/traffic_ops_ort-cron-templateにenvsubstにより環境変数の値を置換して/etc/cron.d/traffic_ops_ort-cronに書き出します。その後/etc/cron.d/traffic_ops_ort-cron-templateを削除します
 envsubst < "/etc/cron.d/traffic_ops_ort-cron-template" > "/etc/cron.d/traffic_ops_ort-cron" && rm -f "/etc/cron.d/traffic_ops_ort-cron-template"
+
 chmod "0644" "/etc/cron.d/traffic_ops_ort-cron" && crontab "/etc/cron.d/traffic_ops_ort-cron"
 
 crond -im off

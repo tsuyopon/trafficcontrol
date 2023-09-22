@@ -16,6 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# 説明
+# このシェルスクリプトは infrastructure/cdn-in-a-box/Makefile 中から呼び出されています
+
 trap 'echo "Error on line ${LINENO} of ${0}" >/dev/stderr; exit 1' ERR;
 set -o errexit -o nounset -o pipefail
 

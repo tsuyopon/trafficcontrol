@@ -222,6 +222,7 @@ func init() {
 	flag.BoolVar(&insecure, "insecure", false, "Disable TLS certificate checks when connecting to cluster. Defaults to false")
 }
 
+// Traffic VaultがRiak専用の場合のツール
 func main() {
 	log.Print("Traffic Control Traffic Vault Util")
 	flag.Parse()

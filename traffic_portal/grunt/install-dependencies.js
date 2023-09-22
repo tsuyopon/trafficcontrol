@@ -15,9 +15,16 @@
 
  */
 
+// npm依存パッケージのインストールや更新を行う
+// see: https://www.npmjs.com/package/grunt-install-dependencies
 module.exports = {
 	options: {
+
+		// "npm install"コマンドを実行するディレクトリを指定する
 		cwd: '<%= globalConfig.distdir %>',
+
+		// falseだとdevDependenciesをインストールしない。
+		// https://github.com/ahutchings/grunt-install-dependencies/blob/416a47d7200151e3ba7aa818b44fc7799350fe2e/README.md#optionsisdevelopment
 		isDevelopment: false
 	}
 };

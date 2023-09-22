@@ -44,6 +44,8 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 	if needAndCanFetch(server.CachegroupID, server.Cachegroup) {
 		innerOpts := NewRequestOptions()
 		innerOpts.QueryParameters.Set("name", *server.Cachegroup)
+
+		// API /api/4.0/cachegroups
 		cg, reqInf, err := to.GetCacheGroups(innerOpts)
 		if err != nil {
 			return cg.Alerts, reqInf, fmt.Errorf("no cachegroup named %s: %w", *server.Cachegroup, err)
@@ -56,6 +58,7 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 		}
 		server.CachegroupID = cg.Response[0].ID
 	}
+
 	if needAndCanFetch(server.CDNID, server.CDNName) {
 		innerOpts := NewRequestOptions()
 		innerOpts.QueryParameters.Set("name", *server.CDNName)
@@ -68,6 +71,7 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 		}
 		server.CDNID = &c.Response[0].ID
 	}
+
 	if needAndCanFetch(server.PhysLocationID, server.PhysLocation) {
 		innerOpts := NewRequestOptions()
 		innerOpts.QueryParameters.Set("name", *server.PhysLocation)
@@ -80,6 +84,7 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 		}
 		server.PhysLocationID = &ph.Response[0].ID
 	}
+
 	if needAndCanFetch(server.StatusID, server.Status) {
 		innerOpts := NewRequestOptions()
 		innerOpts.QueryParameters.Set("name", *server.Status)
@@ -92,6 +97,7 @@ func (to *Session) CreateServer(server tc.ServerV4, opts RequestOptions) (tc.Ale
 		}
 		server.StatusID = &st.Response[0].ID
 	}
+
 	if (server.TypeID == nil || *server.TypeID == 0) && server.Type != "" {
 		innerOpts := NewRequestOptions()
 		innerOpts.QueryParameters.Set("name", server.Type)

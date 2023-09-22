@@ -68,6 +68,7 @@ func runSysctl(cfg config.Cfg) {
 			log.Debugf("sysctl -p ran succesfully.")
 		}
 	}
+
 }
 
 const LockFilePath = "/var/run/t3c.lock"

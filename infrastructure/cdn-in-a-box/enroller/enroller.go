@@ -46,15 +46,20 @@ type session struct {
 	*client.Session
 }
 
+// TrafficOpsのログインエンドポイントにアクセスしてCookie情報を取得する
 func newSession(reqTimeout time.Duration, toURL string, toUser string, toPass string) (session, error) {
 	s, _, err := client.LoginWithAgent(toURL, toUser, toPass, true, "cdn-in-a-box-enroller", true, reqTimeout)
 	return session{s}, err
 }
 
 func (s session) getParameter(m tc.Parameter, header http.Header) (tc.Parameter, error) {
+
 	// TODO: s.GetParameterByxxx() does not seem to work with values with spaces --
 	// doing this the hard way for now
 	opts := client.RequestOptions{Header: header}
+
+	// GET /api/4.0/parametersへのアクセスを行ない、parameterを取得する
+	// https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/parameters.html#get
 	parameters, _, err := s.GetParameters(opts)
 	if err != nil {
 		return m, fmt.Errorf("getting Parameters: %v - alerts: %+v", err, parameters.Alerts)
@@ -68,7 +73,9 @@ func (s session) getParameter(m tc.Parameter, header http.Header) (tc.Parameter,
 }
 
 // enrollType takes a json file and creates a Type object using the TO API
+// 「/shared/enroller/types/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollType(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.Type
 	err := dec.Decode(&s)
@@ -77,6 +84,8 @@ func enrollType(toSession *session, r io.Reader) error {
 		return err
 	}
 
+	// POST /api/4.0/typeへのアクセスを行ないtype情報を生成する
+	// cf. https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/types.html#post
 	alerts, _, err := toSession.CreateType(s, client.RequestOptions{})
 	if err != nil {
 		for _, alert := range alerts.Alerts {
@@ -98,7 +107,9 @@ func enrollType(toSession *session, r io.Reader) error {
 }
 
 // enrollCDN takes a json file and creates a CDN object using the TO API
+// 「/shared/enroller/cdns/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollCDN(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.CDN
 	err := dec.Decode(&s)
@@ -126,7 +137,9 @@ func enrollCDN(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/asns/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollASN(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.ASN
 	err := dec.Decode(&s)
@@ -156,7 +169,9 @@ func enrollASN(toSession *session, r io.Reader) error {
 }
 
 // enrollCachegroup takes a json file and creates a Cachegroup object using the TO API
+// 「/shared/enroller/cachegroups/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollCachegroup(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.CacheGroupNullable
 	err := dec.Decode(&s)
@@ -185,6 +200,7 @@ func enrollCachegroup(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/topologies/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollTopology(toSession *session, r io.Reader) error {
 	dec := json.NewDecoder(r)
 	var s tc.Topology
@@ -214,7 +230,9 @@ func enrollTopology(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/deliveryservices/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollDeliveryService(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.DeliveryServiceV4
 	err := dec.Decode(&s)
@@ -243,7 +261,10 @@ func enrollDeliveryService(toSession *session, r io.Reader) error {
 }
 
 // enrollDeliveryServicesRequiredCapability takes a json file and creates a DeliveryServicesRequiredCapability object using the TO API
+// 「/shared/enroller/deliveryservices_required_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollDeliveryServicesRequiredCapability(toSession *session, r io.Reader) error {
+
+	// jsonデコードする。jsonの内容はDeliveryServicesRequiredCapability構造体としてdsrc(Delivery SeRviCe)にマッピングされる
 	dec := json.NewDecoder(r)
 	var dsrc tc.DeliveryServicesRequiredCapability
 	err := dec.Decode(&dsrc)
@@ -252,30 +273,43 @@ func enrollDeliveryServicesRequiredCapability(toSession *session, r io.Reader) e
 		return err
 	}
 
+	// JSON中にDeliveryServiceのXMLIDが存在しなければエラー
 	if dsrc.XMLID == nil {
 		return errors.New("required capability had no XMLID")
 	}
 
+	// リクエストにxmlIdを指定する
 	opts := client.NewRequestOptions()
 	opts.QueryParameters.Set("xmlId", *dsrc.XMLID)
+
+	// /api/4.0/deliveryservices?xmlId=<xmlId> (GET) 
+	// https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/deliveryservices.html#get
 	dses, _, err := toSession.GetDeliveryServices(opts)
 	if err != nil {
 		log.Infof("getting Delivery Service by XMLID %s: %s", *dsrc.XMLID, err.Error())
 		return err
 	}
+
+	// $.responseに1件もなければエラー
 	if len(dses.Response) < 1 {
 		err = fmt.Errorf("could not find a Delivey Service with XMLID %s", *dsrc.XMLID)
 		log.Infoln(err)
 		return err
 	}
+
+	// リクエスト時に指定したxmlId=<xmlId>に対応するDeliveryServiceのIDを取得する
 	dsrc.DeliveryServiceID = dses.Response[0].ID
 
+	// DeliveryService IDに対応する必須のcapabilityを設定する。
+	// /api/4.0/deliveryservices_required_capabilities (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/deliveryservices_required_capabilities.html#post
 	alerts, _, err := toSession.CreateDeliveryServicesRequiredCapability(dsrc, client.RequestOptions{})
 	if err != nil {
 		log.Infof("error creating Delivery Services Required Capability: %v", err)
 		return err
 	}
 
+	// 標準出力をそのままjson形式にして、半角スペース2つをindentとしてセットしてreturn
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	err = enc.Encode(&alerts)
@@ -283,7 +317,9 @@ func enrollDeliveryServicesRequiredCapability(toSession *session, r io.Reader) e
 	return err
 }
 
+// 「/shared/enroller/deliveryservice_servers/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollDeliveryServiceServer(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 
 	// DeliveryServiceServers lists ds xmlid and array of server names.  Use that to create multiple DeliveryServiceServer objects
@@ -331,7 +367,9 @@ func enrollDeliveryServiceServer(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/divisions/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollDivision(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.Division
 	err := dec.Decode(&s)
@@ -359,7 +397,9 @@ func enrollDivision(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/origins/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollOrigin(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.Origin
 	err := dec.Decode(&s)
@@ -390,7 +430,9 @@ func enrollOrigin(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/parameters/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollParameter(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var params []tc.Parameter
 	err := dec.Decode(&params)
@@ -467,7 +509,9 @@ func enrollParameter(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/phys_locations/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollPhysLocation(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.PhysLocation
 	err := dec.Decode(&s)
@@ -487,8 +531,7 @@ func enrollPhysLocation(toSession *session, r io.Reader) error {
 
 		}
 		err = fmt.Errorf("error creating Physical Location '%s': %v - alerts: %+v", s.Name, err, alerts.Alerts)
-		log.Infoln(err)
-		return err
+		log.Infoln(err) return err
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -498,7 +541,9 @@ func enrollPhysLocation(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/regions/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollRegion(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.Region
 	err := dec.Decode(&s)
@@ -527,7 +572,9 @@ func enrollRegion(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/statuses/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollStatus(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.StatusNullable
 	err := dec.Decode(&s)
@@ -555,7 +602,9 @@ func enrollStatus(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/tenants/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollTenant(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.Tenant
 	err := dec.Decode(&s)
@@ -584,7 +633,9 @@ func enrollTenant(toSession *session, r io.Reader) error {
 	return err
 }
 
+// 「/shared/enroller/users/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollUser(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.UserV4
 	err := dec.Decode(&s)
@@ -615,15 +666,20 @@ func enrollUser(toSession *session, r io.Reader) error {
 }
 
 // enrollProfile takes a json file and creates a Profile object using the TO API
+// 「/shared/enroller/profiles/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollProfile(toSession *session, r io.Reader) error {
+
+	// JSONデコード
 	dec := json.NewDecoder(r)
 	var profile tc.Profile
 
+	// JSONオブジェクトをProfile構造体のprofileにマッピングする
 	err := dec.Decode(&profile)
 	if err != nil {
 		log.Infof("error decoding Profile: %s\n", err)
 		return err
 	}
+
 	// get a copy of the parameters
 	parameters := profile.Parameters
 
@@ -636,6 +692,7 @@ func enrollProfile(toSession *session, r io.Reader) error {
 		return errors.New("missing name on profile")
 	}
 
+	// /api/4.0/profiles?name=<profile.Name> (GET)から取得する
 	opts := client.NewRequestOptions()
 	opts.QueryParameters.Set("name", profile.Name)
 	profiles, _, err := toSession.GetProfiles(opts)
@@ -643,8 +700,10 @@ func enrollProfile(toSession *session, r io.Reader) error {
 	createProfile := false
 	if err != nil || len(profiles.Response) == 0 {
 		// no profile by that name -- need to create it
+		// APIにname=<profile.Name>として指定したが、レスポンスの値に1件も存在しなかった場合には新規作成としてcreateProfileフラグをtrueにする
 		createProfile = true
 	} else {
+		// APIにname=<profile.Name>として指定したが、レスポンスの値に1件以上の値が存在する場合。この場合には、更新として判断する。
 		// updating - ID needs to match
 		profile = profiles.Response[0]
 	}
@@ -652,88 +711,155 @@ func enrollProfile(toSession *session, r io.Reader) error {
 	var alerts tc.Alerts
 	var action string
 	if createProfile {
+
+		// profileの新規作成が行われる
+		// /api/4.0/profiles (POST)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#post
 		alerts, _, err = toSession.CreateProfile(profile, client.RequestOptions{})
 		if err != nil {
 			found := false
 			for _, alert := range alerts.Alerts {
 				if alert.Level == tc.ErrorLevel.String() && strings.Contains(alert.Text, "already exists") {
+					// 既に登録されているが、何かしらの警告がある場合
 					found = true
 					break
 				}
 			}
+
 			if found {
 				log.Infof("profile %s already exists", profile.Name)
 			} else {
 				log.Infof("error creating profile from %+v: %v - alerts: %+v", profile, err, alerts.Alerts)
 			}
 		}
+
+		// 以下では作成したプロファイルが存在するかどうかを確認するために、profileを参照している
+		// /api/4.0/profiles?name=<profile.Name> (GET)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles.html#get
 		profiles, _, err = toSession.GetProfiles(opts)
+
+		// APIからの取得がエラーの場合
 		if err != nil {
 			log.Infof("error getting profile ID from %+v: %v - alerts: %+v", profile, err, profiles.Alerts)
 		}
+
+		// APIから取得したがレスポンス0件の場合
 		if len(profiles.Response) == 0 {
 			err = fmt.Errorf("no results returned for getting profile ID from %+v", profile)
 			log.Infoln(err)
 			return err
 		}
+
+		// 取得したprofileを格納して、actionには作成したことを示す「creating」を登録する
 		profile = profiles.Response[0]
 		action = "creating"
+
 	} else {
+		// createProfile=falseの場合には新規作成ではなく、更新処理となる。
+		// /profiles/<id> (PUT)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/profiles_id.html#put
 		alerts, _, err = toSession.UpdateProfile(profile.ID, profile, client.RequestOptions{})
+
+		// actionには更新したことを示す「updating」を登録する
 		action = "updating"
 	}
 
+	// 何かerrに引っ掛かったらエラーメッセージを出力して、returnする
 	if err != nil {
 		log.Infof("error "+action+" from %s: %s", err)
 		return err
 	}
 
+	// parametersは`json:params`の数によりイテレーションしている
+	//
+	// 以下、json中の一部params部分のみ抜粋
+	//	"params": [
+	//		{
+	//			"configFile": "records.config",
+	//			"name": "CONFIG proxy.config.proxy_name",
+	//			"secure": false,
+	//			"value": "STRING __HOSTNAME__"
+	//		},
+	//		{
+	//			"configFile": "records.config",
+	//			"name": "CONFIG proxy.config.config_dir",
+	//			"secure": false,
+	//			"value": "STRING /opt/trafficserver/etc/trafficserver"
+	//		},
 	for _, p := range parameters {
+
 		var name, configFile, value string
 		var secure bool
+
+		// 「configFile」を取得する
 		if p.ConfigFile != nil {
 			configFile = *p.ConfigFile
 		}
+
+		// 「name」を取得する
 		if p.Name != nil {
 			name = *p.Name
 		}
+
+		// 「value」を取得する
 		if p.Value != nil {
 			value = *p.Value
 		}
+
+		// paramにtc.Parameter構造体をセット
 		param := tc.Parameter{ConfigFile: configFile, Name: name, Value: value, Secure: secure}
+
+		// /api/4.0/parameters (GET) によりparameterを取得する
+		// https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/parameters.html#get
 		eparam, err := toSession.getParameter(param, nil)
 		if err != nil {
+
 			// create it
 			log.Infof("creating param %+v", param)
+
+			// /api/4.0/parameters (POST)
+			// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#post
 			newAlerts, _, err := toSession.CreateParameter(param, client.RequestOptions{})
 			if err != nil {
 				log.Infof("can't create parameter %+v: %s, %v", param, err, newAlerts.Alerts)
 				continue
 			}
+
+			// parameterの登録が問題ないことを /api/4.0/parameters (GET)にリクエストすることによって確認する
 			eparam, err = toSession.getParameter(param, nil)
 			if err != nil {
 				log.Infof("error getting new parameter %+v: \n", param)
 				log.Infof(err.Error())
 				continue
 			}
+
 		} else {
 			log.Infof("found param %+v\n", eparam)
 		}
 
+		// GETリクエストによって取得したprofile情報にparam IDが1つもなければcontinue
 		if eparam.ID < 1 {
 			log.Infof("param ID not found for %v", eparam)
 			continue
 		}
+
+		// GETリクエストによって取得したprofile情報にparam IDが1つもなければcontinueする
 		pp := tc.ProfileParameterCreationRequest{ProfileID: profile.ID, ParameterID: eparam.ID}
+
+		// ProfileにParameterを割り当てる
+		// /api/4.0/profileparameters (POST)
 		resp, _, err := toSession.CreateProfileParameter(pp, client.RequestOptions{})
 		if err != nil {
+			// エラーの場合
 			found := false
 			for _, alert := range resp.Alerts {
 				if alert.Level == tc.ErrorLevel.String() && strings.Contains(alert.Text, "already exists") {
+					// すでに登録されていて、何かしらのエラーが表示されてしまった場合
 					found = true
 					break
 				}
 			}
+
 			if !found {
 				log.Infof("error creating profileparameter %+v: %v - alerts: %+v", pp, err, resp.Alerts)
 			}
@@ -748,7 +874,10 @@ func enrollProfile(toSession *session, r io.Reader) error {
 }
 
 // enrollServer takes a json file and creates a Server object using the TO API
+// 「/shared/enroller/servers/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServer(toSession *session, r io.Reader) error {
+
+	// JSONをデコードする
 	dec := json.NewDecoder(r)
 	var s tc.ServerV40
 	err := dec.Decode(&s)
@@ -765,14 +894,16 @@ func enrollServer(toSession *session, r io.Reader) error {
 	}
 
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
+	enc.SetIndent("", "  ")  // 半角スペース2つをインデントに使用する
 	err = enc.Encode(&alerts)
 
 	return err
 }
 
 // enrollServerCapability takes a json file and creates a ServerCapability object using the TO API
+// 「/shared/enroller/server_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServerCapability(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var s tc.ServerCapability
 	err := dec.Decode(&s)
@@ -799,7 +930,9 @@ func enrollServerCapability(toSession *session, r io.Reader) error {
 // enrollFederation takes a json file and creates a Federation object using the TO API.
 // It also assigns a Delivery Service, the CDN in a Box admin user, IPv4 resolvers,
 // and IPv6 resolvers to that Federation.
+// 「/shared/enroller/federations/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollFederation(toSession *session, r io.Reader) error {
+
 	dec := json.NewDecoder(r)
 	var federation tc.AllDeliveryServiceFederationsMapping
 	err := dec.Decode(&federation)
@@ -920,6 +1053,7 @@ func enrollFederation(toSession *session, r io.Reader) error {
 
 // createFederationResolversOfType creates Federation Resolvers of either RESOLVE4 type or RESOLVE6 type.
 func createFederationResolversOfType(toSession *session, resolverTypeName tc.FederationResolverType, ipAddresses []string) ([]int, error) {
+
 	typeNameString := string(resolverTypeName)
 	opts := client.NewRequestOptions()
 	opts.QueryParameters.Set("name", typeNameString)
@@ -956,8 +1090,13 @@ func createFederationResolversOfType(toSession *session, resolverTypeName tc.Fed
 }
 
 // enrollServerServerCapability takes a json file and creates a ServerServerCapability object using the TO API
+// 「/shared/enroller/server_server_capabilities/」配下のファイルが生成された場合(またはそれに相当するHTTPエンドポイントにリクエストされた場合)
 func enrollServerServerCapability(toSession *session, r io.Reader) error {
+
+	// JSONデコード
 	dec := json.NewDecoder(r)
+
+	// JSONを構造体にマッピングします。sにマッピングされます。
 	var s tc.ServerServerCapability
 	err := dec.Decode(&s)
 	if err != nil {
@@ -965,29 +1104,46 @@ func enrollServerServerCapability(toSession *session, r io.Reader) error {
 		log.Infoln(err)
 		return err
 	}
+
+	// s.Serverは「json:serverHostName」の値となります。この値がセットされていなければエラーになります。
 	if s.Server == nil {
 		err = errors.New("server/Capability relationship did not specify a server")
 		return err
 	}
 
+	// 「/api/4.0/servers?hostName=<s.Server> (GET)」
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/servers.html
 	resp, _, err := toSession.GetServers(client.RequestOptions{QueryParameters: url.Values{"hostName": []string{*s.Server}}})
 	if err != nil {
 		err = fmt.Errorf("getting server '%s': %v - alerts: %+v", *s.Server, err, resp.Alerts)
 		log.Infoln(err)
 		return err
 	}
+
+	// Serverが何も取得できない場合にはエラー
 	if len(resp.Response) < 1 {
 		err = fmt.Errorf("could not find Server %s", *s.Server)
 		log.Infoln(err.Error())
 		return err
 	}
+
+	// /serversエンドポイントにhostNameクエリパラメータを指定したのに複数取れるのはおかしいのでエラー
 	if len(resp.Response) > 1 {
 		err = fmt.Errorf("found more than 1 Server with hostname %s", *s.Server)
 		log.Infoln(err.Error())
 		return err
 	}
+
+	// レスポンスからサーバを識別するIDを取得する。この値は次の「/api/4.0/server_server_capabilities」へのjson中に必要な値なので取得している
 	s.ServerID = resp.Response[0].ID
 
+	// ここではサーバIDを指定してサーバへのcapabilityの登録を行う。capabilityの値として指定できる値は決まっていない(CIABだとHDDで、他にもramやdiskが指定されているケースもある)
+	// 下記のエンドポイントにリクエストが行われる
+	//  /api/4.0/server_server_capabilities(POST)
+	//  see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v4/server_server_capabilities.html#post
+	//
+	// なお、deliveryservices_required_capabilitiesによって、xmlIdに対してcapabilityの値を絞る設定をすることが可能である。
+	//
 	alerts, _, err := toSession.CreateServerServerCapability(s, client.RequestOptions{})
 	if err != nil {
 		err = fmt.Errorf("error creating Server Server Capability: %v - alerts: %+v", err, alerts.Alerts)
@@ -995,27 +1151,37 @@ func enrollServerServerCapability(toSession *session, r io.Reader) error {
 		return err
 	}
 
+	// 上記APIから取得したレスポンスである標準出力をそのままjsonに加工して、レスポンスとして応答する
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
+	enc.SetIndent("", "  ")  // indentはスペース2つ
 	err = enc.Encode(&alerts)
 
 	return err
 }
 
 type dirWatcher struct {
-	*fsnotify.Watcher
+	*fsnotify.Watcher   // TODO: これにはなぜ型がないのか?
 	TOSession *session
 	watched   map[string]func(toSession *session, fn string) error
 }
 
+// ファイルが追加された際にfsnotifyによる検知が行われます。
+// ディレクトリ配下毎に呼び出されるハンドラが異なります。
 func newDirWatcher(toSession *session) (*dirWatcher, error) {
+
 	var err error
 	var dw dirWatcher
+
+	// fsnotify.NewWatcherはファイル変更を検知する為の仕組みです。下記でwatcherを起動しています
+	// https://qiita.com/cotrpepe/items/3877a8d803f45c6f1171#events
 	dw.Watcher, err = fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
+
 	dw.watched = make(map[string]func(toSession *session, fn string) error)
+
+	// goroutineとして別スレッドにて起動されます。
 	go func() {
 		const (
 			processed = ".processed"
@@ -1027,8 +1193,14 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 		emptyCount := map[string]int{}
 		const maxEmptyTries = 10
 
+		// このgoroutineはチャネル受信処理の無限ループとなっています。
+		// 実際にここがenrollerのメイン処理となります
 		for {
+
+			// チャネル
 			select {
+
+			// ファイル追加などのイベントを検知したらチャネル受信する
 			case event, ok := <-dw.Events:
 				if !ok {
 					log.Infoln("event not ok")
@@ -1036,15 +1208,19 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 				}
 
 				// ignore all but Create events
+				// 「ファイル生成」以外のイベントも受け取ることがありますが、ファイル生成以外のイベントは全て無視する
+				// cf. https://qiita.com/cotrpepe/items/3877a8d803f45c6f1171#events
 				if event.Op&fsnotify.Create != fsnotify.Create {
 					continue
 				}
 
 				// skip already processed files
+				// ファイル生成を検知したファイル名(event.Name)のsuffixの値として「.processed」や「.rejected」であれば、処理をskipする
 				if strings.HasSuffix(event.Name, processed) || strings.HasSuffix(event.Name, rejected) {
 					continue
 				}
 
+				// ファイル生成を検知したファイル名のstatが取れないか、ディレクトリであれば処理をskipする
 				i, err := os.Stat(event.Name)
 				if err != nil || i.IsDir() {
 					log.Infoln("skipping " + event.Name)
@@ -1055,20 +1231,30 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 				// what directory is the file in?  Invoke the matching func
 				dir := filepath.Base(filepath.Dir(event.Name))
 				suffix := rejected
+
+				// (REF1)の箇所で定義された無名関数がfに入ります。
 				if f, ok := dw.watched[dir]; ok {
+
+					// ログ出力の為の処理
 					t := filepath.Base(dir)
 					log.Infoln("creating " + t + " from " + event.Name)
+
 					// Sleep for 100 milliseconds so that the file content is probably there when the directory watcher
 					// sees the file
+					// 100msだけ待っても、見れるファイルを確認したいため。100msだけ待つ
 					time.Sleep(100 * time.Millisecond)
 
+					// (REF1)の箇所で定義された無名関数がfに入ります。
+					// event.Nameには無名関数が入るようです
 					err := f(toSession, event.Name)
+
 					// If a file is empty, try reading from it 10 times before giving up on that file
 					if err == io.EOF {
 						originalName := originalNameRegex.ReplaceAllString(event.Name, "")
 						if _, exists := emptyCount[originalName]; !exists {
 							emptyCount[originalName] = 0
 						}
+
 						emptyCount[originalName]++
 						log.Infof("empty json object %s: %s\ntried file %d out of %d times", originalName, err.Error(), emptyCount[originalName], maxEmptyTries)
 						if emptyCount[originalName] < maxEmptyTries {
@@ -1078,32 +1264,46 @@ func newDirWatcher(toSession *session) (*dirWatcher, error) {
 							}
 							continue
 						}
+
 					}
+
 					if err != nil {
 						log.Infof("error creating %s from %s: %s\n", dir, event.Name, err.Error())
 					} else {
 						suffix = processed
 					}
+
 				} else {
+					// dw.watched[dir]から無名関数情報が取得できなかった場合
 					log.Infof("no method for creating %s\n", dir)
 				}
+
 				// rename the file indicating if processed or rejected
+				// suffixに「.processed」か「.rejected」を付与する
 				err = os.Rename(event.Name, event.Name+suffix)
 				if err != nil {
 					log.Infof("error renaming %s to %s: %s\n", event.Name, event.Name+suffix, err.Error())
 				}
+
+			// 監視中にエラーが発生した場合にチャネル受信します
 			case err, ok := <-dw.Errors:
 				log.Infof("error from fsnotify: ok? %v;  error: %v\n", ok, err)
 				continue
 			}
 		}
 	}()
+
 	return &dw, err
 }
 
 // watch starts f when a new file is created in dir
 func (dw *dirWatcher) watch(watchdir, t string, f func(*session, io.Reader) error) {
+
+	// 「/shared/enroller/」+ t なので、tは/shared/enroller/配下のwatchしたいディレクトリとなります。
+	// tの値はtopologies, tenants, users, types, server_server_capabilities, etc... などの値になります
 	dir := watchdir + "/" + t
+
+	// ディレクトリが存在しなければ、ディレクトリを0700で生成します。
 	if stat, err := os.Stat(dir); err != nil || !stat.IsDir() {
 		// attempt to create dir
 		if err = os.Mkdir(dir, os.ModeDir|0700); err != nil {
@@ -1113,7 +1313,11 @@ func (dw *dirWatcher) watch(watchdir, t string, f func(*session, io.Reader) erro
 	}
 
 	log.Infoln("watching " + dir)
+
+	// dirWatcher構造体に「/shared/enroller/topologies」などのウォッチしたいディレクトリを追加します。
 	dw.Add(dir)
+
+	// ディレクトリが検知された際に実行したい処理 (REF1)
 	dw.watched[t] = func(toSession *session, fn string) error {
 		fh, err := os.Open(fn)
 		if err != nil {
@@ -1124,26 +1328,43 @@ func (dw *dirWatcher) watch(watchdir, t string, f func(*session, io.Reader) erro
 	}
 }
 
+// 指定されたディレクトリのwatcherを開始する
 func startWatching(watchDir string, toSession *session, dispatcher map[string]func(*session, io.Reader) error) (*dirWatcher, error) {
+
 	// watch for file creation in directories
+	// watcherの起動を行います。なお、fsnotifyのチャネル受信については下記でgoroutineが起動しています
 	dw, err := newDirWatcher(toSession)
+
+	// watcher起動に成功したら
 	if err == nil {
+		// dispatchで定義されたそれぞれのエンドポイント「/shared/enroller/<name>/」にファイルが追加されたら、それぞれのハンドラを実行するように登録しています
 		for d, f := range dispatcher {
 			dw.watch(watchDir, d, f)
 		}
 	}
+
 	return dw, err
 }
 
+// enrollerとしてHTTPサーバによるエンドポイントを提供する。
+// watcherと同様の数の機能をHTTPエンドポイントとして提供する。
+// CDN-in-a-boxではデフォルトで--portオプションを指定していないので、その場合にはHTTPサーバは起動されない。
 func startServer(httpPort string, toSession *session, dispatcher map[string]func(*session, io.Reader) error) error {
+
+	// ベースとなるエンドポイント
 	baseEP := "/api/4.0/"
+
+	// dispatcherで定義された値を「/api/4.0/<追加>」としてエンドポイントが定義される
+	// たとえば「/api/4.0/deliveryservices_required_capabilities」
 	for d, f := range dispatcher {
 		http.HandleFunc(baseEP+d, func(w http.ResponseWriter, r *http.Request) {
 			defer log.Close(r.Body, "could not close reader")
+			// 「/api/4.0/deliveryservices_required_capabilities」の場合にはenrollDeliveryServicesRequiredCapabilityハンドラが実行される
 			f(toSession, r.Body)
 		})
 	}
 
+	// HTTPサーバを起動する
 	go func() {
 		server := &http.Server{
 			Addr:      httpPort,
@@ -1179,9 +1400,18 @@ func (cfg logConfig) EventLog() log.LogLocation {
 	return log.LogLocationStdout
 }
 
+// 説明
+// enrollerはCDN In a Boxのコンテナ内からTrafficOps APIへの初期化処理リクエストを行う為のコンポーネントです。
+// 主に以下の2つの役割があります。
+// 1. 特定のファイルが追加されたら、検知してそのディレクトリに応じてTrafficOpsのエンドポイントにリクエストします。
+// 2. HTTPサーバのエンドポイントを起動します
+// 
+// cf. https://traffic-control-cdn.readthedocs.io/en/latest/admin/quick_howto/ciab.html#the-enroller
+//
 func main() {
 	var watchDir, httpPort string
 
+	// オプションの取得処理
 	flag.StringVar(&startedFile, "started", startedFile, "file indicating service was started")
 	flag.StringVar(&watchDir, "dir", "", "base directory to watch")
 	flag.StringVar(&httpPort, "http", "", "act as http server for POST on this port (e.g. :7070)")
@@ -1191,11 +1421,14 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+
+	// --dirが指定されておらず、--httpも指定されていない場合には、カレンとディレクトをwatch対象にする
 	if watchDir == "" && httpPort == "" {
 		// if neither -dir nor -http provided, default to watching the current dir
 		watchDir = "."
 	}
 
+	// TrafficOpsの接続先設定情報を含む構造体の取得
 	var toCreds struct {
 		URL      string `envconfig:"TO_URL"`
 		User     string `envconfig:"TO_USER"`
@@ -1206,6 +1439,7 @@ func main() {
 
 	reqTimeout := time.Second * time.Duration(60)
 
+	// TrafficOpsのログインエンドポイントに接続してCookie情報を発行しておく。この情報はHTTPサーバ起動関数やwatcher起動関数への引数として渡される
 	log.Infoln("Starting TrafficOps session")
 	toSession, err := newSession(reqTimeout, toCreds.URL, toCreds.User, toCreds.Password)
 	if err != nil {
@@ -1214,6 +1448,7 @@ func main() {
 	}
 	log.Infoln("TrafficOps session established")
 
+	// 以下に記載されるのはHTTPエンドポイント「/api/v4.0/<name>」の定義です。実行されるハンドラがenroll<Name>です。
 	// dispatcher maps an API endpoint name to a function to act on the JSON input Reader
 	dispatcher := map[string]func(*session, io.Reader) error{
 		"types":                                  enrollType,
@@ -1239,16 +1474,24 @@ func main() {
 		"users":                                  enrollUser,
 	}
 
+	// --httpの値(httpポート)が指定されていれば、goroutineにてHTTPサーバを起動する
+	// CDN-in-a-Boxでは--httpがデフォルトで指定されないので、HTTPサーバは起動しない。
 	if len(httpPort) != 0 {
+
 		log.Infoln("Starting http server on " + httpPort)
+		// HTTPサーバの起動を行う。startWatching関数と同様にdispatcherを渡しているので、同じ処理をHTTPエンドポイントとして提供する
 		err := startServer(httpPort, &toSession, dispatcher)
 		if err != nil {
 			log.Errorln("http server on " + httpPort + " failed: " + err.Error())
 		}
 	}
 
+	// watchDirオプションが空でなければ、goroutineにてwatcherを開始する
+	// CDN-in-a-boxではデフォルトでwatchDirには「/shared/enroller」が指定されている
 	if len(watchDir) != 0 {
 		log.Infoln("Watching directory " + watchDir)
+
+		// 指定したディレクトリへのwatch処理を開始する。
 		dw, err := startWatching(watchDir, &toSession, dispatcher)
 		defer log.Close(dw, "could not close dirwatcher")
 		if err != nil {
@@ -1257,13 +1500,16 @@ func main() {
 	}
 
 	// create this file to indicate the enroller is ready
-	f, err := os.Create(startedFile)
+	// enrollerの処理が準備万端になったらenroller-startedファイルを生成する
+	f, err := os.Create(startedFile)  // enroller-startedファイル
 	if err != nil {
 		panic(err)
 	}
 	log.Infoln("Created " + startedFile)
 	log.Close(f, "could not close file")
 
+	// 受信チャネルを定義しているが、このチャネルに送付してくる処理はないので永遠に待ち続ける
+	// 裏側でgoroutineとしてwatcherやhttpサーバは稼働している
 	var waitforever chan struct{}
 	<-waitforever
 }

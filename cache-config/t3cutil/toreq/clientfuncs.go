@@ -149,6 +149,7 @@ func (cl *TOClient) GetServers(reqHdr http.Header) ([]atscfg.Server, toclientlib
 }
 
 func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Header) (*atscfg.Server, toclientlib.ReqInf, error) {
+
 	if cl.c == nil {
 		return cl.old.GetServerByHostName(serverHostName)  // cache-config/t3cutil/toreq/toreqold/clientfuncs.go の GetServerByHostName ハンドラが呼ばれる
 	}
@@ -156,8 +157,9 @@ func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Heade
 	server := atscfg.Server{}
 	reqInf := toclientlib.ReqInf{}
 
-	// GetRetryの最後の引数に無名関数が実行されていることに注意する
+	// GetRetryの最後の引数に無名関数が指定されていることに注意する
 	err := torequtil.GetRetry(cl.NumRetries, "server-name-"+serverHostName, &server, func(obj interface{}) error {
+
 		params := url.Values{}
 		params.Add("hostName", serverHostName)
 
@@ -168,28 +170,37 @@ func (cl *TOClient) GetServerByHostName(serverHostName string, reqHdr http.Heade
 			QueryParameters: params,
 			Header:          reqHdr,
 		})
+
+		// 上記APIエンドポイントからの取得エラー
 		if err != nil {
 			return errors.New("getting server name '" + serverHostName + "' from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}
 
-		// 
+		// 上記エンドポイントから取得したステータスコードが「304 Not Modified」でない場合にif文のコードパスを実行する
 		if toReqInf.StatusCode != http.StatusNotModified {
+
+			// APIエンドポイントからのレスポンスが無い。つまり、サーバ情報が返ってこない場合
 			if len(toServers.Response) < 1 {
 				return errors.New("getting server name '" + serverHostName + "' from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': no servers returned")
 			}
+
+			//
 			asv, err := serverToLatest(&toServers.Response[0])
 			if err != nil {
 				return errors.New("converting server to latest version: " + err.Error())
 			}
+
 			server := obj.(*atscfg.Server)
 			*server = *asv
 		}
 		reqInf = toReqInf
 		return nil
 	})
+
 	if err != nil {
 		return nil, reqInf, errors.New("getting server name '" + serverHostName + "': " + err.Error())
 	}
+
 	return &server, reqInf, nil
 }
 
@@ -395,6 +406,7 @@ func (cl *TOClient) GetTopologies(reqHdr http.Header) ([]tc.Topology, toclientli
 }
 
 func (cl *TOClient) GetConfigFileParameters(configFile string, reqHdr http.Header) ([]tc.Parameter, toclientlib.ReqInf, error) {
+
 	if cl.c == nil {
 		return cl.old.GetConfigFileParameters(configFile)
 	}
@@ -402,6 +414,8 @@ func (cl *TOClient) GetConfigFileParameters(configFile string, reqHdr http.Heade
 	params := []tc.Parameter{}
 	reqInf := toclientlib.ReqInf{}
 	err := torequtil.GetRetry(cl.NumRetries, "config_file_"+configFile+"_parameters", &params, func(obj interface{}) error {
+		// /parameters?configFile=<configFile> (GET)
+		// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/parameters.html#get
 		toParams, toReqInf, err := GetParametersByConfigFile(cl.c, configFile, ReqOpts(reqHdr))
 		if err != nil {
 			return errors.New("getting delivery services from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
@@ -701,6 +715,7 @@ func (cl *TOClient) GetCDNSSLKeys(cdnName tc.CDNName, reqHdr http.Header) ([]tc.
 }
 
 func (cl *TOClient) GetStatuses(reqHdr http.Header) ([]tc.Status, toclientlib.ReqInf, error) {
+
 	if cl.c == nil {
 		return cl.old.GetStatuses()
 	}
@@ -708,18 +723,22 @@ func (cl *TOClient) GetStatuses(reqHdr http.Header) ([]tc.Status, toclientlib.Re
 	statuses := []tc.Status{}
 	reqInf := toclientlib.ReqInf{}
 	err := torequtil.GetRetry(cl.NumRetries, "statuses", &statuses, func(obj interface{}) error {
+
 		toStatus, toReqInf, err := cl.c.GetStatuses(*ReqOpts(reqHdr))
 		if err != nil {
 			return errors.New("getting server update statuses from Traffic Ops '" + torequtil.MaybeIPStr(reqInf.RemoteAddr) + "': " + err.Error())
 		}
+
 		status := obj.(*[]tc.Status)
 		*status = toStatus.Response
 		reqInf = toReqInf
 		return nil
 	})
+
 	if err != nil {
 		return nil, reqInf, errors.New("getting server update statuses: " + err.Error())
 	}
+
 	return statuses, reqInf, nil
 }
 

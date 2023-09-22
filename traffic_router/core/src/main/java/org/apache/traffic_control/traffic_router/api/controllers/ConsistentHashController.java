@@ -98,6 +98,7 @@ public class ConsistentHashController {
 		return ResponseEntity.ok(deliveryService);
 	}
 
+	//  「/crs/consistenthash/patternbased/regex」
 	@RequestMapping(value = "/patternbased/regex")
 	public @ResponseBody
 	ResponseEntity<Map<String, String>> testPatternBasedRegex(@RequestParam(name = "regex") final String regex,

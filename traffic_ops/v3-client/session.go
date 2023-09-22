@@ -66,6 +66,8 @@ func NewSession(user, password, url, userAgent string, client *http.Client, useC
 // Returns the logged in client, the remote address of Traffic Ops which was translated and used to log in, and any error. If the error is not nil, the remote address may or may not be nil, depending whether the error occurred before the login request.
 // The useCache argument is ignored. It exists to avoid breaking compatibility, and does not exist in newer functions.
 func LoginWithAgent(toURL string, toUser string, toPasswd string, insecure bool, userAgent string, useCache bool, requestTimeout time.Duration) (*Session, net.Addr, error) {
+
+	// このファイルはv3-client用なので下記でapiVersions()は3.1と3.0のスライスを応答する
 	cl, ip, err := toclientlib.LoginWithAgent(toURL, toUser, toPasswd, insecure, userAgent, requestTimeout, apiVersions())
 	if err != nil {
 		return nil, nil, err

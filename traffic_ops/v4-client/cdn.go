@@ -29,6 +29,8 @@ const apiCDNs = "/cdns"
 // CreateCDN creates a CDN.
 func (to *Session) CreateCDN(cdn tc.CDN, opts RequestOptions) (tc.Alerts, toclientlib.ReqInf, error) {
 	var alerts tc.Alerts
+	// /api/4.0/cdns (POST)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/cdns.html#post
 	reqInf, err := to.post(apiCDNs, opts, cdn, &alerts)
 	return alerts, reqInf, err
 }
@@ -44,6 +46,9 @@ func (to *Session) UpdateCDN(id int, cdn tc.CDN, opts RequestOptions) (tc.Alerts
 // GetCDNs retrieves CDNs from Traffic Ops.
 func (to *Session) GetCDNs(opts RequestOptions) (tc.CDNsResponse, toclientlib.ReqInf, error) {
 	var data tc.CDNsResponse
+
+	// /api/4.0/cdns (GET)
+	// see: https://traffic-control-cdn.readthedocs.io/en/v7.0.1/api/v4/cdns.html#get
 	reqInf, err := to.get(apiCDNs, opts, &data)
 	return data, reqInf, err
 }

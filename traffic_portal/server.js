@@ -106,6 +106,9 @@ app.use(morgan('combined', morganOpts));
 app.use(timeout(config.timeout));
 
 if (app.get('env') === 'dev') {
+    // grunt/watch.jsで「livereload: true」とすることで特定のファイルが検知された場合に、検知する仕組みがある。
+    // この場合にはデフォルト35728ポートで起動する
+    // see: https://github.com/intesso/connect-livereload
     app.use(require('connect-livereload')({
         port: 35728,
         excludeList: ['.woff', '.flv']

@@ -169,6 +169,12 @@ func Routes(d ServerData) ([]Route, http.Handler, error) {
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodPut, Path: `asns/?$`, Handler: api.UpdateHandler(&asn.TOASNV11{}), RequiredPrivLevel: auth.PrivLevelOperations, RequiredPermissions: []string{"ASN:UPDATE", "ASN:READ", "CACHE-GROUP:UPDATE", "CACHE-GROUP:READ"}, Authenticated: Authenticated, Middlewares: nil, ID: 42641723173},
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodDelete, Path: `asns/?$`, Handler: api.DeleteHandler(&asn.TOASNV11{}), RequiredPrivLevel: auth.PrivLevelOperations, RequiredPermissions: []string{"ASN:DELETE", "ASN:READ", "CACHE-GROUP:READ", "CACHE-GROUP:UPDATE"}, Authenticated: Authenticated, Middlewares: nil, ID: 402048983},
 
+		// **重要**
+		// Handlerに指定される「api.ReadHandler」、「api.UpdateHandler」、「api.CreateHandler」、「api.DeleteHandler」については多くの箇所で定義されています。
+		// その引数に指定された型によって、リフレクション機能によって型が動的に決定し、呼び出されるレシーバに対する関数が動的に変わります。
+		// 例えば、「Handler: api.ReadHandler(&parameter.TOParameter{})」が指定された場合にはtraffic_ops/traffic_ops_golang/parameter/parameters.goの中でTOParameterレシーバの関数が定義されているので、これらのRead(), Update()などが呼ばれます。
+
+
 		//ASN: CRUD
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodGet, Path: `asns/?$`, Handler: api.ReadHandler(&asn.TOASNV11{}), RequiredPrivLevel: auth.PrivLevelReadOnly, RequiredPermissions: []string{"ASN:READ", "CACHE-GROUP:READ"}, Authenticated: Authenticated, Middlewares: nil, ID: 4738777223},
 		{Version: api.Version{Major: 4, Minor: 0}, Method: http.MethodPut, Path: `asns/{id}$`, Handler: api.UpdateHandler(&asn.TOASNV11{}), RequiredPrivLevel: auth.PrivLevelOperations, RequiredPermissions: []string{"ASN:UPDATE", "ASN:READ", "CACHE-GROUP:READ", "CACHE-GROUP:UPDATE"}, Authenticated: Authenticated, Middlewares: nil, ID: 49511986293},

@@ -137,7 +137,10 @@ func checkConfigLine(line string, lineNumber int, filesAdding map[string]struct{
 					if m.MatchString(param) {
 						verified, exists = pluginParams[param]
 						if !exists {
-							// ファイルが存在する稼働かをチェックする
+
+							// t3c-check-refsの--files-addingオプションにおいて、t3c generateで自動生成されるファイルの全ての情報がカンマ区切りで指定されてくる。
+							// 標準入力して渡されたファイルコンテンツの内容を確認して@pparam=xxxxで指定されたファイルが存在するかどうかを下記で検証する
+							// ファイル名がfiles-addingで指定されたものに含まれていたり、下記のparamのファイルがfiles-addingに含まれていなかったとしても既にファイルとして存在していればtrueとなる。
 							verified = verifyPluginConfigfile(param, filesAdding)
 							pluginParams[param] = verified
 						}
@@ -238,14 +241,23 @@ func loadAvailablePlugins() {
 	}
 }
 
+// 以下のいずれかに該当したらtrueを返す
+//   1. 標準入力として渡された@pparamから抽出したファイル名のBase文字列が、--files-addingで指定された文字列に含まれていたらtrueを応答する
+//   2. 標準入力として渡された@pparamから抽出したファイル名のBase文字列が、既に存在していたらtrueを応答する
+// 
 func verifyPluginConfigfile(filename string, filesAdding map[string]struct{}) bool {
 	// filename isn't necessarily just a filename, it's whatever was in the plugin param, and can include a relative or absolute path.
 	// So, get just the file name for the filesAdding check, because filesAdding is just the name.
 	// TODO smarter path checking. This would wrongly succeed if a file was being created but in a different path.
+
+	// @pparamから抽出したファイル名のBase文字列が、--files-addingで指定された文字列に含まれていたらtrueを応答する
 	filenameForAdding := filepath.Base(filename)
 	if _, ok := filesAdding[filenameForAdding]; ok {
 		return true
 	}
+
+	// @pparamから抽出したファイル名のBase文字列が、--files-addingで指定された文字列に含まれていなかったとしても、
+	// @pparamから抽出したファイル名が存在していたらtrueを応答する
 	if filepath.IsAbs(filename) {
 		return fileExists(filename)
 	} else {
@@ -270,9 +282,10 @@ func verifyPlugin(filename string) bool {
 }
 
 // t3c-checkからこのバイナリが呼ばれます
-// このバイナリが呼ばれる際に検証したいファイル情報は標準入力として渡ってきます。
+// このバイナリが呼ばれる際に検証したいファイル情報は「標準入力」として渡ってきます。
 // なお、このt3c-check-refsはplugin.configとremap.configの2つのファイルだけ呼ばれる可能性があります。呼び出し元でこの制御が行われています。
 func main() {
+
 	// The count of plugins that could not be verified is returned
 	// to the calling program.
 	//

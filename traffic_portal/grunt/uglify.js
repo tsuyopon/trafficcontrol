@@ -17,6 +17,8 @@
  * under the License.
  */
 
+// minifyを行うための仕組みです。
+// see: https://github.com/gruntjs/grunt-contrib-uglify
 module.exports = {
     dist: {
         files: {

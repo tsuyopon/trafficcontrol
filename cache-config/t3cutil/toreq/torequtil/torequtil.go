@@ -65,6 +65,7 @@ func (fc *FsCookie) GetHTTPCookies() []*http.Cookie {
 // GetRetry attempts to get the given object, retrying with exponential backoff up to cfg.NumRetries.
 // The objName is not used in actual fetching or logic, but only for logging. It can be any printable string, but should be unique and reflect the object being fetched.
 func GetRetry(numRetries int, objName string, obj interface{}, getter func(obj interface{}) error) error {
+
 	start := time.Now()
 	currentRetry := 0
 	for {
@@ -73,10 +74,12 @@ func GetRetry(numRetries int, objName string, obj interface{}, getter func(obj i
 		if err == nil {
 			break
 		}
+
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			// if the server returned a 404, retrying won't help
 			return errors.New("getting uncached: " + err.Error())
 		}
+
 		if currentRetry == numRetries {
 			return errors.New("getting uncached: " + err.Error())
 		}

@@ -41,7 +41,13 @@ func checkHmac(message, messageMAC, key []byte) bool {
 	return hmac.Equal(messageMAC, expectedMAC)
 }
 
+// Cookie情報を秘密鍵を用いて検証する
 func Parse(secret, cookie string) (*Cookie, error) {
+
+	// ログイン後のCookieとして送付されてくるサンプルを記載(一部改竄済み)
+	// access_token=eyJhbGciOiJIUzI1NiIsIXXXXXIkpXVCJ9.eyJleHAiOjE2ODQyOTUzODIsIm1vam9Db29raWUiOiJleUpoZFhSb1gyUmhkR0VpT2lKaFpHMXBiaUlzSW1WNGNHbHlaWE1pT2pFMk9EUXlPVFV6T0RJc0ltSjVJam9pZEhKaFptWnBZMk52Ym5SeWIyd3RaMjh0ZEc5amIyOXJhV1VpZlEtLTVmZWZiYWRmZDA1YjUwNjBlNzNlMGEXXXXXYjJiZjUwNmVkODEyNWYifQ.G-R46yZlNzDI5uQTgXz-1gGy3Raud763ebAFENXXXXX; 
+	// mojolicious=eyJhdXRoX2RhdGEiOiJhZG1pbiIsImV4cGlyZXMiOjE2ODQyNzczODIsImJ5IjoidHJhZmZpY2NvbnRyb2wtZ28tdG9jb23raWUifQ--0f8f04ed0e60ef14f4088426f2fc7a3a400b7c40; last_seen_log=2023-05-16T21:49:42.4752559Z
+
 	dashPos := strings.Index(cookie, "-")
 	if dashPos == -1 {
 		return nil, fmt.Errorf("malformed cookie '%s' - no dashes", cookie)
@@ -69,6 +75,7 @@ func Parse(secret, cookie string) (*Cookie, error) {
 		return nil, fmt.Errorf("error decoding signature: %v", err)
 	}
 
+	// cookieにつめられているのはJWT形式の値であり、最後の部分は署名であるので秘密鍵を使って検証する
 	if !checkHmac([]byte(base64TxtSig), sigBytes, []byte(secret)) {
 		return nil, fmt.Errorf("bad signature")
 	}

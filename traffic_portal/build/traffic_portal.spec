@@ -40,7 +40,9 @@ tar -xzvf $RPM_SOURCE_DIR/traffic_portal-%{version}.tgz
 %setup
 
 %build
+		# npm installによってpackage.jsonに記載したパッケージをnode_modules配下にインストールします
 		npm install
+		# 「grunt dist」によってgrunt設定ファイルGruntfile.js中に定義されるdistタスクを実施する。これによって、静的ファイルが生成されます
 		grunt dist
 
 %install
@@ -58,6 +60,8 @@ tar -xzvf $RPM_SOURCE_DIR/traffic_portal-%{version}.tgz
 		%__cp ${RPM_BUILD_DIR}/traffic_portal-%{version}/build/etc/logrotate.d/traffic_portal ${RPM_BUILD_ROOT}/etc/logrotate.d/.
 		%__cp ${RPM_BUILD_DIR}/traffic_portal-%{version}/build/etc/logrotate.d/traffic_portal-access ${RPM_BUILD_ROOT}/etc/logrotate.d/.
 		%__rm -f ${RPM_BUILD_DIR}/traffic_portal-%{version}/app/dist/package-lock.json
+
+		# grunt distで生成されたファイルなどは「app/dist/*」配下に配置されるが、/opt/traffic_portal/public/にコピーされる。
 		%__cp -r ${RPM_BUILD_DIR}/traffic_portal-%{version}/app/dist/* ${RPM_BUILD_ROOT}%{traffic_portal_home}/.
 
 	# creates dynamic json file needed at runtime for traffic portal to display release info

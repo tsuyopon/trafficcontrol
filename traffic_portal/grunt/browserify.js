@@ -17,7 +17,13 @@
  * under the License.
  */
 
+// browserify.jsはnode.jsで解釈可能なJavaScript記法で記述することができます。それに対して変換をかけることによって、ブラウザでも解釈できるように変換してくれます。
+// 参考: https://www.codegrid.net/articles/2015-browserify-1/
+//
 module.exports = {
+
+    // 指定した共通系ライブラリをまとめる。prod用途
+    // srcで読み込み、requireで指定された箇所をoptions.aliasで指定された各種js(主に.min.js)にて保管して、destに書き出す。
     'shared-libs-prod': {
         src: ['./<%= globalConfig.srcdir %>/scripts/shared-libs.js'],
         dest: './<%= globalConfig.resourcesdir %>/assets/js/shared-libs.js',
@@ -47,6 +53,9 @@ module.exports = {
             },
         },
     },
+
+    // 指定した共通系ライブラリをまとめる。dev用途
+    // srcで読み込み、requireで指定された箇所をoptions.aliasで指定された各種js(主に.min.js)にて保管して、destに書き出す。
     'shared-libs-dev': {
         src: ['./<%= globalConfig.srcdir %>/scripts/shared-libs.js'],
         dest: './<%= globalConfig.resourcesdir %>/assets/js/shared-libs.js',
@@ -76,6 +85,11 @@ module.exports = {
             },
         },
     },
+
+    // アプリケーションに特化したライブラリapp.jsを生成する(コンパイルされると50000行以上のjsコードになります)
+    // このapp.jsの中からconfig.jsにアクセスしたり、traffic_portal_properties.jsonといった設定ファイルにアクセスするコードや、TrafficOps WebAPIにアクセスする共通コードが含まれています。
+    //
+    // options.aliasに指定されているapp-template.jsはgrunt/html2js.jsによって生成されるようです。
     'app-prod': {
         src: ['./<%= globalConfig.srcdir %>/app.js'],
         dest: './<%= globalConfig.resourcesdir %>/assets/js/app.js',
@@ -88,10 +102,13 @@ module.exports = {
             }
         }
     },
+
+    // app-prodのdebug用のようです。browserifyOptions=true
     'app-dev': {
         src: ['./<%= globalConfig.srcdir %>/app.js'],
         dest: './<%= globalConfig.resourcesdir %>/assets/js/app.js',
         browserifyOptions: {
+            // TODO: どのようなデバッグできるのかは詳細不明: https://github.com/jmreidy/grunt-browserify/blob/fd0f242873afc3d8bd4ed80df8bd462f52b72dea/README.md#browserifyoptions
             debug: true,
         },
         options: {

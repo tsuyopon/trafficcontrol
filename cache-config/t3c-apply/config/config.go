@@ -337,27 +337,33 @@ If any of the related flags are also set, they override the mode's default behav
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+serviceActionFlagName+"="+t3cutil.ApplyServiceActionFlagRestart.String())
 				*serviceActionPtr = t3cutil.ApplyServiceActionFlagRestart.String()
 			}
+
 			if !getopt.IsSet(installPackagesFlagName) { // 「--install-packages」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+installPackagesFlagName+"="+"true")
 				*installPackagesPtr = true
 			}
+
 			if !getopt.IsSet(ignoreUpdateFlagName) {    // 「--ignore-update-flag」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+ignoreUpdateFlagName+"="+"true")
 				*ignoreUpdateFlagPtr = true
 			}
+
 			if !getopt.IsSet(updateIPAllowFlagName) {   // 「--update-ipallow」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+updateIPAllowFlagName+"="+"true")
 				*updateIPAllowPtr = true
 			}
+
 		case t3cutil.ModeReport:      // 「--run-mode=report」が指定された場合
 			if !getopt.IsSet(reportOnlyFlagName) {      // 「--report-only」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+reportOnlyFlagName+"="+"true")
 				*reportOnlyPtr = true
 			}
+
 			if !getopt.IsSet(ignoreUpdateFlagName) {    // 「--ignore-update-flag」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+ignoreUpdateFlagName+"="+"true")
 				*ignoreUpdateFlagPtr = true
 			}
+
 			if !getopt.IsSet(silentFlagName) {          // 「--silent」が指定されていない場合には、明示的に値をセット
 				modeLogStrs = append(modeLogStrs, runMode.String()+" setting --"+silentFlagName+"="+"true")
 				*silentPtr = true

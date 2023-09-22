@@ -17,14 +17,29 @@
  * under the License.
  */
 
+
+// ファイルやディレクトリをコピーする
+// see: https://www.npmjs.com/package/grunt-contrib-copy
+
 module.exports = {
     dev: {
         files: [
             {
+                // expand=trueを指定することで、下記のcwd, dest, srcなどのオプション群が指定できるようになる。
+                //   cf. https://gruntjs.com/configuring-tasks#building-the-files-object-dynamically
                 expand: true,
+
+                // パターンが明示的にその場所にピリオドを持たない場合でも、ピリオドで始まるファイル名とマッチするようにする。 (TODO: 意味不明。要確認)
+                // cf. https://gruntjs.com/configuring-tasks#files
                 dot: true,
+
+                // 現在のディレクトリ(app/src)
                 cwd: '<%= globalConfig.srcdir %>',
+
+                // コピー先の指定(app/dist/public/resources)
                 dest: '<%= globalConfig.resourcesdir %>',
+
+                // コピー元ファイルの指定 (cwdからの相対パスが指定される)
                 src: [
                     'assets/css/**/*',
                     'assets/fonts/**/*',
@@ -66,6 +81,7 @@ module.exports = {
                     'assets/js/**/*'
                 ]
             },
+            // 下記のpackage.jsonの定義が「dev」の定義と比べて「dist」は多い
             {
                 expand: true,
                 dot: true,

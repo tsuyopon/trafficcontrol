@@ -28,6 +28,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// TrafficRouterがクライアントのトラフィックをroutingできる設定されたCacheGroupのリストです
+// see https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_router/traffic_router_api.html#crs-locations
+
 @Controller
 @RequestMapping("/locations")
 public class LocationController {
@@ -43,6 +46,8 @@ public class LocationController {
 		return map;
 	}
 
+	// 「/crs/locations」
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_router/traffic_router_api.html#crs-locations
 	@RequestMapping(value = "", method = RequestMethod.GET)
 	public @ResponseBody
 	Map<String,List<String>> getLocations() {
@@ -51,6 +56,7 @@ public class LocationController {
 		return locations;
 	}
 
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_router/traffic_router_api.html#crs-locations-caches
 	@RequestMapping(value = "/caches", method = RequestMethod.GET)
 	public @ResponseBody
 	Map<String,Map<String, List<CacheModel>>> getCaches() {

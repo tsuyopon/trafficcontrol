@@ -830,7 +830,10 @@ func GetRequestedAPIVersion(path string) *Version {
 
 // GetDB returns the database from the context. This should very rarely be needed, rather `NewInfo` should always be used to get a transaction, except in extenuating circumstances.
 func GetDB(ctx context.Context) (*sqlx.DB, error) {
-	val := ctx.Value(DBContextKey)
+
+	// context.value: https://deeeet.com/writing/2017/02/23/go-context-value/
+	// ctx.Valueで取り出す。ここで取り出す値についてはWithValueで格納していると思われる。WithValueはtraffic_ops/traffic_ops_golang/routing/routing.goからのみ実施されていそうである。
+	val := ctx.Value(DBContextKey) // DBContextKey = db
 	if val != nil {
 		switch v := val.(type) {
 		case *sqlx.DB:
@@ -843,6 +846,7 @@ func GetDB(ctx context.Context) (*sqlx.DB, error) {
 }
 
 func GetConfig(ctx context.Context) (*config.Config, error) {
+
 	val := ctx.Value(ConfigContextKey)
 	if val != nil {
 		switch v := val.(type) {
@@ -1042,22 +1046,29 @@ func ParseDBError(ierr error) (error, error, int) {
 // GetUserFromReq returns the current user, any user error, any system error, and an error code to be returned if either error was not nil.
 // This also uses the given ResponseWriter to refresh the cookie, if it was valid.
 func GetUserFromReq(w http.ResponseWriter, r *http.Request, secret string) (auth.CurrentUser, error, error, int) {
+
 	var cookie *http.Cookie
 	var oldToken jwt.Token
 
+	// Authorizationヘッダが空ではなく、その値に「Bearer」を含められている(See OAuth2 RFC)
 	if r.Header.Get(rfc.Authorization) != "" && strings.Contains(r.Header.Get(rfc.Authorization), "Bearer") {
+
 		givenToken := r.Header.Get(rfc.Authorization)
 		tokenSplit := strings.Split(givenToken, " ")
 		if len(tokenSplit) > 1 {
 			givenToken = tokenSplit[1]
 		}
+
 		bearerCookie, readToken, err := getCookieFromAccessToken(givenToken, secret)
 		if err != nil {
 			return auth.CurrentUser{}, errors.New("unauthorized, please log in."), err, http.StatusUnauthorized
 		}
 		cookie = bearerCookie
 		oldToken = readToken
+
 	} else {
+		// Authorizationヘッダ以外の認証方法の場合には、リクエスト中のCookieを確認する
+
 		for _, givenCookie := range r.Cookies() {
 			if cookie != nil {
 				break
@@ -1083,6 +1094,7 @@ func GetUserFromReq(w http.ResponseWriter, r *http.Request, secret string) (auth
 		return auth.CurrentUser{}, errors.New("unauthorized, please log in."), nil, http.StatusUnauthorized
 	}
 
+	// cookieの値を指定された秘密鍵を使ってパースします
 	oldCookie, err := tocookie.Parse(secret, cookie.Value)
 	if err != nil {
 		return auth.CurrentUser{}, errors.New("unauthorized, please log in."), errors.New("error parsing cookie: " + err.Error()), http.StatusUnauthorized
@@ -1109,6 +1121,7 @@ func GetUserFromReq(w http.ResponseWriter, r *http.Request, secret string) (auth
 		return auth.CurrentUser{}, nil, errors.New("request context config missing"), http.StatusInternalServerError
 	}
 
+	// PostgreSQL中のDBから対象のユーザーが権限を保持してるかを確認する
 	user, userErr, sysErr, code := auth.GetCurrentUserFromDB(db, username, time.Duration(cfg.DBQueryTimeoutSeconds)*time.Second)
 	if userErr != nil || sysErr != nil {
 		return auth.CurrentUser{}, userErr, sysErr, code
@@ -1143,11 +1156,18 @@ func GetUserFromReq(w http.ResponseWriter, r *http.Request, secret string) (auth
 }
 
 func getCookieFromAccessToken(bearerToken string, secret string) (*http.Cookie, jwt.Token, error) {
+
 	var cookie *http.Cookie
+
+	// JWTに含まれる署名をsecretで検証する
 	token, err := jwt.Parse([]byte(bearerToken), jwt.WithVerify(jwa.HS256, []byte(secret)))
+
+	// 署名検証失敗
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid token: %w", err)
 	}
+
+	// token取得失敗
 	if token == nil {
 		return nil, nil, errors.New("parsing claims: parsed nil token")
 	}
@@ -1169,8 +1189,9 @@ func getCookieFromAccessToken(bearerToken string, secret string) (*http.Cookie, 
 }
 
 func AddUserToReq(r *http.Request, u auth.CurrentUser) {
+
 	ctx := r.Context()
-	ctx = context.WithValue(ctx, auth.CurrentUserKey, u)
+	ctx = context.WithValue(ctx, auth.CurrentUserKey, u)  // auth.CurrentUserKey = "iota"
 	*r = *r.WithContext(ctx)
 }
 

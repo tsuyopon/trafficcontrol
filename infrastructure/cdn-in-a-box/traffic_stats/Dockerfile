@@ -41,6 +41,8 @@ RUN dnf install -y epel-release && \
         openssl && \
     dnf clean all
 
+
+# trafficstats-dependenciesを基準として、trafficstats用のコンテナイメージを作る
 FROM trafficstats-dependencies AS trafficstats
 
 # Default values for RPM -- override with `docker build --build-arg RPM=...'
@@ -60,6 +62,7 @@ COPY dns/set-dns.sh \
 
 ENTRYPOINT /run.sh
 
+# trafficstats-dependenciesを基準として、get-delve用のコンテナイメージを作る
 FROM trafficstats-dependencies AS get-delve
 
 RUN dnf -y install golang && \

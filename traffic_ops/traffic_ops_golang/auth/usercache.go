@@ -78,11 +78,14 @@ type users struct {
 var usersCache = users{RWMutex: &sync.RWMutex{}}
 
 func usersCacheIsEnabled() bool {
+
+	// usersCache.enabledはInitUsersCacheでtrueへの書き込みが行われる。
 	if usersCache.enabled {
 		usersCache.RLock()
 		defer usersCache.RUnlock()
-		return usersCache.initialized
+		return usersCache.initialized  // trueを返すはず
 	}
+
 	return false
 }
 
@@ -161,6 +164,7 @@ func createTokenToUsernameMap(users map[string]user) map[string]string {
 
 // PostgreSQLからロール情報やユーザ情報を取得して、配列に保存しておく
 func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
+
 	dbCtx, dbClose := context.WithTimeout(context.Background(), timeout)
 	defer dbClose()
 	roles := make(map[int]role)
@@ -171,6 +175,7 @@ func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 	if err != nil {
 		return nil, errors.New("beginning users transaction: " + err.Error())
 	}
+
 	defer func() {
 		if err := tx.Commit(); err != nil && err != sql.ErrTxDone {
 			log.Errorln("committing users transaction: " + err.Error())
@@ -219,6 +224,7 @@ func getUsers(db *sql.DB, timeout time.Duration) (map[string]user, error) {
 		}
 		newUsers[u.UserName] = u
 	}
+
 	if err = rows.Err(); err != nil {
 		return nil, errors.New("iterating over user rows: " + err.Error())
 	}

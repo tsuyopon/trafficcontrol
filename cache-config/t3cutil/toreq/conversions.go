@@ -38,6 +38,7 @@ func serversToLatest(svs tc.ServersV4Response) ([]atscfg.Server, error) {
 }
 
 func serverToLatest(oldSv *tc.ServerV40) (*atscfg.Server, error) {
+	// TODO: 下記はどこの関数が呼ばれているんだろうか。見つからない。
 	asv := atscfg.Server(*oldSv)
 	return &asv, nil
 }

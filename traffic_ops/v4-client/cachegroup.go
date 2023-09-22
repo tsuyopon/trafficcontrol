@@ -28,6 +28,7 @@ const apiCachegroups = "/cachegroups"
 
 // CreateCacheGroup creates the given Cache Group.
 func (to *Session) CreateCacheGroup(cachegroup tc.CacheGroupNullable, opts RequestOptions) (tc.CacheGroupDetailResponse, toclientlib.ReqInf, error) {
+
 	var resp tc.CacheGroupDetailResponse
 	if cachegroup.TypeID == nil && cachegroup.Type != nil {
 		opts := NewRequestOptions()

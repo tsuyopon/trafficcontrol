@@ -150,6 +150,9 @@ func (to *Session) UpdateServerByID(id int, server tc.Server) (tc.Alerts, toclie
 // GetServersWithHdr retrieves a list of servers using the given optional query
 // string parameters and HTTP headers.
 func (to *Session) GetServersWithHdr(params *url.Values, header http.Header) (tc.ServersV3Response, toclientlib.ReqInf, error) {
+
+	// 「/api/3.x/servers」
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/api/v3/servers.html#get
 	route := APIServers
 	if params != nil {
 		route += "?" + params.Encode()

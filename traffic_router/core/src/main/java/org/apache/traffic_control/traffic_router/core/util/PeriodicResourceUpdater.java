@@ -52,6 +52,7 @@ import static org.apache.commons.codec.digest.DigestUtils.md5Hex;
  *
  */
 public class PeriodicResourceUpdater {
+
 	private static final Logger LOGGER = LogManager.getLogger(PeriodicResourceUpdater.class);
 
 	private AsyncHttpClient asyncHttpClient;
@@ -137,6 +138,8 @@ public class PeriodicResourceUpdater {
 		final File existingDB = new File(databaseLocation);
 		if(existingDB.exists()) {
 			try {
+				// TrafficMonitorWatcher.javaのinitからlistnerはセットされる
+				// 第１引数に指定された値によって呼び出すlistnerのupdate()が変わってくる
 				listener.update(IOUtils.toString(new FileReader(existingDB)));
 			} catch (Exception e) {
 				LOGGER.warn(e,e);

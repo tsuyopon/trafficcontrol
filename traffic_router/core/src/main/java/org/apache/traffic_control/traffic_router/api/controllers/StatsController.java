@@ -27,9 +27,12 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import java.util.HashMap;
 import java.util.Map;
 
+// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_router/traffic_router_api.html#crs-stats
+
 @Controller
 @RequestMapping("/stats")
 public class StatsController {
+
 	@Autowired
 	private DataExporter dataExporter;
 
@@ -44,6 +47,8 @@ public class StatsController {
 		return map;
 	}
 
+	// IPv4やIPv6アドレスのgeolocation情報を応答する
+	// https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_router/traffic_router_api.html#crs-stats-ip-ip
 	@GetMapping(value = "/ip/{ip:.+}")
 	public @ResponseBody
 	Map<String, Object> getCaches(@PathVariable("ip") final String ip,

@@ -348,15 +348,20 @@ func diff(cfg config.Cfg, newFile []byte, fileLocation string, reportOnly bool, 
 // The cfgFile should be the full text of either a plugin.config or remap.config.
 // Returns nil if t3c-check-refs returned no errors found, or the error found if any.
 func checkRefs(cfg config.Cfg, cfgFile []byte, filesAdding []string) error {
+
+	// --file-addingsオプションを作成する。スライスをカンマ区切りで結合する
 	args := []string{`check`, `refs`,
 		"--files-adding=" + strings.Join(filesAdding, ","),
 	}
+
 	if cfg.LogLocationErr == log.LogLocationNull {
 		args = append(args, "-s")
 	}
+
 	if cfg.LogLocationWarn != log.LogLocationNull {
 		args = append(args, "-v")
 	}
+
 	if cfg.LogLocationInfo != log.LogLocationNull {
 		args = append(args, "-v")
 	}

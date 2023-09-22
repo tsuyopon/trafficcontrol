@@ -40,6 +40,7 @@ func GetConfigFile(toData *t3cutil.ConfigData, fileInfo atscfg.CfgMeta, hdrComme
 	}()
 	log.Infoln("GetConfigFile '" + fileInfo.Name + "'")
 
+	// ファイル名に対応したハンドラ処理があれば、その関数ハンドラがreturnされる。指定したファイル名にハンドラが一致しない場合には、一致しなかった場合の専用の反dらが応答される
 	getConfigFile := getConfigFileFunc(fileInfo.Name)
 	cfg, err := getConfigFile(toData, fileInfo.Name, hdrCommentTxt, thiscfg)
 	logWarnings("getting config file '"+fileInfo.Name+"': ", cfg.Warnings)
@@ -47,6 +48,7 @@ func GetConfigFile(toData *t3cutil.ConfigData, fileInfo atscfg.CfgMeta, hdrComme
 	if err != nil {
 		return "", "", false, "", []string{}, err
 	}
+
 	return cfg.Text, cfg.ContentType, cfg.Secure, cfg.LineComment, cfg.Warnings, nil
 }
 
@@ -65,19 +67,27 @@ type ConfigFileLiteralFunc struct {
 
 func getConfigFileFunc(fileName string) ConfigFileFunc {
 
+	// 指定されたファイルが特定のファイル名に一致した際に実行すべき関数ハンドラへの応答をreturnする
 	for _, lf := range configFileLiteralFuncs {
+		// ファイル名が完全マッチした場合
 		if fileName == lf.Name {
 			return lf.Func
 		}
 	}
+
+	// ファイル名のprefixとsuffixが共にマッチした場合に実行すべき関数ハンドラへの応答をreturnする
 	for _, psf := range configFilePrefixSuffixFuncs {
+		// ファイル名のprefixとsuffixが共にマッチした場合
 		if strings.HasPrefix(fileName, psf.Prefix) && strings.HasSuffix(fileName, psf.Suffix) {
 			return psf.Func
 		}
 	}
+
 	return MakeUnknownConfig
 }
 
+// ファイル名に対するハンドラへのマッピングを定義している
+// see: https://traffic-control-cdn.readthedocs.io/en/latest/overview/profiles_and_parameters.html
 var configFileLiteralFuncs = []ConfigFileLiteralFunc{
 
 	{"12M_facts", Make12MFacts},
@@ -108,6 +118,7 @@ var configFileLiteralFuncs = []ConfigFileLiteralFunc{
 	{"volume.config", MakeVolumeDotConfig},
 }
 
+// ファイル名のprefixとsuffixに基づき、それらのファイルに対してどのような処理を施すかのマッピングを定義する
 var configFilePrefixSuffixFuncs = []ConfigFilePrefixSuffixFunc{
 	{atscfg.HeaderRewriteFirstPrefix, ".config", MakeHeaderRewrite},
 	{atscfg.HeaderRewriteInnerPrefix, ".config", MakeHeaderRewrite},

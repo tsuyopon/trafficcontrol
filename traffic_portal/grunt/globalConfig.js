@@ -17,7 +17,13 @@
  * under the License.
  */
 
+// このファイルは Gruntfile.js から下記のようにして読み込まれ、さまざまな共通設定として利用されることになります。
+//    var globalConfig = require('./grunt/globalConfig');
+//
+// 「$git grep globalConfig.resourcesdir」のように探すことで利用箇所を探すことができます。
+//
 module.exports = function() {
+
     var globalConfig = {
         app: 'app',
         resourcesdir: 'app/dist/public/resources',

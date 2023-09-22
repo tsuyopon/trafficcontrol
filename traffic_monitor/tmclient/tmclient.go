@@ -127,14 +127,22 @@ func (c *TMClient) DSStats() (dsdata.Stats, error) {
 }
 
 func (c *TMClient) CRStates(raw bool) (tc.CRStates, error) {
+
+	// 引数のrawの値によって、「/publish/CrStates」か「/publish/CrStates?raw」かを決定する
 	path := "/publish/CrStates"
 	if raw {
+		// see: https://traffic-control-cdn.readthedocs.io/en/latest/admin/traffic_monitor.html#distributed-polling
 		path += "?raw"
 	}
+
 	obj := tc.CRStates{}
+
+	// 「/publish/CrStates」か「/publish/CrStates?raw」にアクセスする
+	// see: https://traffic-control-cdn.readthedocs.io/en/latest/development/traffic_monitor/traffic_monitor_api.html#publish-crstates
 	if err := c.GetJSON(path, &obj); err != nil {
 		return tc.CRStates{}, err // GetJSON adds context
 	}
+
 	return obj, nil
 }
 
@@ -196,38 +204,50 @@ func (c *TMClient) ConfigDoc() (handler.OpsConfig, error) {
 	return obj, nil
 }
 
+// TrafficMonitorへのエンドポイントへとアクセスし、レスポンスを応答する
 func (c *TMClient) getBytes(path string) ([]byte, error) {
+
+	// TrafficMonitorへのパスへアクセスするための初期情報の作成
 	url := c.url + path
 	httpClient := http.Client{Timeout: c.timeout}
 	if c.Transport != nil {
 		httpClient.Transport = c.Transport
 	}
+
+	// 下記でHTTPリクエスト(GET)を行う
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, errors.New("getting from '" + url + "': " + err.Error())
 	}
 	defer log.Close(resp.Body, "Unable to close http client "+url)
 
+	// 2xx以外であればエラーとする
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("Monitor '"+url+"' returned bad status %v", resp.StatusCode)
 	}
 
+	// レスポンス情報の取得
 	respBts, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.New("reading body from '" + url + "': " + err.Error())
 	}
+
 	return respBts, nil
 }
 
 func (c *TMClient) GetJSON(path string, obj interface{}) error {
+
 	bts, err := c.getBytes(path)
 	if err != nil {
 		return err // getBytes already adds context
 	}
+
 	if err := json.Unmarshal(bts, obj); err != nil {
 		return errors.New("unmarshalling response '" + string(bts) + "' json: " + err.Error())
 	}
+
 	return nil
+
 }
 
 func (c *TMClient) getStr(path string) (string, error) {

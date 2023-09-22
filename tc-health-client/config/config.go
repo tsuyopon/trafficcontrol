@@ -102,6 +102,8 @@ func (lcfg LogCfg) EventLog() log.LogLocation   { return log.LogLocation(log.Log
  * updating - when true, existing credentials may be updated from the credential file
  */
 func ReadCredentials(cfg *Cfg, updating bool) error {
+
+	// 設定ファイル中のto-credential-fileの値が空であれば、nilを応答する
 	if cfg.TOCredentialFile == "" {
 		return nil
 	}
@@ -143,6 +145,7 @@ func ReadCredentials(cfg *Cfg, updating bool) error {
 	cfg.CredentialFile.LastModifyTime = modTime
 
 	return nil
+
 }
 
 func GetConfig() (Cfg, error, bool) {
@@ -153,6 +156,7 @@ func GetConfig() (Cfg, error, bool) {
 	var logLocationInfo = log.LogLocationNull
 	var logLocationWarn = log.LogLocationNull
 
+	// tc-health-clientコマンドラインに指定できるオプションです
 	configFilePtr := getopt.StringLong("config-file", 'f', DefaultConfigFile, "full path to the json config file")
 	logdirPtr := getopt.StringLong("logging-dir", 'l', DefaultLogDirectory, "directory location for log files")
 	helpPtr := getopt.BoolLong("help", 'h', "Print usage information and exit")
@@ -160,6 +164,7 @@ func GetConfig() (Cfg, error, bool) {
 
 	getopt.Parse()
 
+	// --config-file(-f)が指定されない場合にはデフォルト値を使う
 	if configFilePtr != nil {
 		configFile = *configFilePtr
 	} else {
@@ -168,10 +173,12 @@ func GetConfig() (Cfg, error, bool) {
 
 	var logfile string
 
+	// ログのパスを決定する
 	logfile = filepath.Join(*logdirPtr, DefaultLogFile)
 
 	logLocationErr = logfile
 
+	// -v, -vv, -vvvの指定されたvの数により下記の3つのうちのどれかが決定する
 	if *verbosePtr == 1 {
 		logLocationWarn = logfile
 	} else if *verbosePtr == 2 {
@@ -183,11 +190,13 @@ func GetConfig() (Cfg, error, bool) {
 		logLocationDebug = logfile
 	}
 
+	// --help(-h)オプションの場合
 	if help := *helpPtr; help == true {
 		Usage()
 		return Cfg{}, nil, true
 	}
 
+	// ログ設定オブジェクトの作成
 	lcfg := LogCfg{
 		LogLocationDebug: logLocationDebug,
 		LogLocationErr:   logLocationErr,
@@ -195,15 +204,18 @@ func GetConfig() (Cfg, error, bool) {
 		LogLocationWarn:  logLocationWarn,
 	}
 
+	// ログの初期化
 	if err := log.InitCfg(&lcfg); err != nil {
 		return Cfg{}, errors.New("initializing loggers: " + err.Error() + "\n"), false
 	}
 
+	// 設定ファイルの情報
 	cf := util.ConfigFile{
 		Filename:       configFile,
 		LastModifyTime: 0,
 	}
 
+	// 
 	cfg := Cfg{
 		HealthClientConfigFile: cf,
 		CredentialFile:         util.ConfigFile{},
@@ -217,9 +229,12 @@ func GetConfig() (Cfg, error, bool) {
 		return cfg, err, false
 	}
 
+	// ホスト名情報を元にしてsleepするランダム値を決定している。そのランダム値だけsleepする
 	dispersion := GetTOLoginDispersion(cfg.TOLoginDispersionFactor)
 	log.Infof("waiting %v seconds before logging into TrafficOps", dispersion.Seconds())
 	time.Sleep(dispersion)
+
+	// TrafficOps APIから現在稼働中(ONLINE)のTrafficMonitorの情報を取得する。その値はcfg.TrafficMonitorsにセットされる
 	err = GetTrafficMonitors(&cfg)
 	if err != nil {
 		return cfg, err, false
@@ -228,12 +243,17 @@ func GetConfig() (Cfg, error, bool) {
 	return cfg, nil, false
 }
 
+// TrafficOps APIから取得して、現在稼働中のオンライン(ステータスがONLINE)のTrafficMonitorを取得する。なお、その際に設定ファイルに記載されたCDN名と一致することも併せてチェックしている。
+// 結果はcfg.Trafficmonitorに格納している。
 func GetTrafficMonitors(cfg *Cfg) error {
+
+	// 関数へのクエリパラメータとして指定する
 	qry := &url.Values{}
 	qry.Add("type", "RASCAL")
 	qry.Add("status", "ONLINE")
 
 	// login to traffic ops.
+	// TrafficOpsから認証情報を取得する
 	if toSession == nil {
 		session, _, err := toclient.LoginWithAgent(cfg.TOUrl, cfg.TOUser, cfg.TOPass, true, userAgent, false, GetRequestTimeout())
 		if err != nil {
@@ -242,6 +262,8 @@ func GetTrafficMonitors(cfg *Cfg) error {
 			toSession = session
 		}
 	}
+
+	// 引数にて「/api/3.x/servers?type=RASCAL&status=ONLINE」パラメータを指定している(関数の先頭で定義されている)
 	srvs, _, err := toSession.GetServersWithHdr(qry, nil)
 	if err != nil {
 		// next time we'll login again and get a new session.
@@ -250,7 +272,11 @@ func GetTrafficMonitors(cfg *Cfg) error {
 	}
 
 	cfg.TrafficMonitors = make(map[string]bool, 0)
+
+	// 先ほど取得したTrafficOpsのレスポンスをサーバ毎に確認する
 	for _, v := range srvs.Response {
+		// 取得したcdnName(*v.CDNName)の値が設定ファイルに指定されている値と一致していて、かつ取得したstatus(*v.Status)の値が「ONLINE」と一致している場合には、利用可能と判断して、
+		// 「cfg.TrafficMonitors[<ホスト名>.<ドメイン名>] = true」 として格納する。この値はtmagent.goのfindATrafficMonitor関数で利用される
 		if *v.CDNName == cfg.CDNName && *v.Status == "ONLINE" {
 			hostname := *v.HostName + "." + *v.DomainName
 			cfg.TrafficMonitors[hostname] = true
@@ -264,19 +290,27 @@ func GetTMPollingInterval() time.Duration {
 	return tmPollingInterval
 }
 
+// ホスト名情報を元にしてからmd5を取得して、ランダムでウェイトするべき時間を計算している
 func GetTOLoginDispersion(dispersionFactor int) time.Duration {
+
 	dispersionSeconds := uint64(tmPollingInterval.Seconds()) * uint64(dispersionFactor)
+
+	// ホスト名を取得する
 	hostName, err := os.Hostname()
 	if err != nil {
 		log.Errorf("the OS hostname is not set, cannot continue: %s", err.Error())
 		os.Exit(1)
 	}
+
+	// ホスト名からmd5hashを決定する
 	md5hash := md5.Sum([]byte(hostName))
 	sl := md5hash[0:8]
+
 	disp := (binary.BigEndian.Uint64(sl) % dispersionSeconds)
 	if disp < uint64(tmPollingInterval.Seconds()*2) {
 		disp = ((disp * 2) + uint64(tmPollingInterval.Seconds()))
 	}
+
 	return time.Duration(disp) * time.Second
 }
 
@@ -284,75 +318,103 @@ func GetRequestTimeout() time.Duration {
 	return toRequestTimeout
 }
 
+// 設定の最終更新時刻が前回読み込み時刻よりも新しい場合には設定読み込みを行う。そうでない場合には何もしない
+// なお、新しく設定を読み込んだ場合にだけ戻り値のupdatedにはtrueが設定される
 func LoadConfig(cfg *Cfg) (bool, error) {
+
 	updated := false
+
+	// デフォルト/etc/trafficcontrol/tc-health-client.jsonとなる
 	configFile := cfg.HealthClientConfigFile.Filename
+
+	// 指定された設定ファイルの前回更新時刻を取得する
 	modTime, err := util.GetFileModificationTime(configFile)
 	if err != nil {
 		return updated, errors.New(err.Error())
 	}
 
+	// 直前に取得した設定ファイルの更新時刻が、構造体中にあらかじめ保存されていた前回更新時刻よりも大きい場合にはif文を実行する
+	// つまり、前回更新時刻が変わらなければ、何もせず updatedの値はfalseが返されることになる
 	if modTime > cfg.HealthClientConfigFile.LastModifyTime {
+
 		log.Infoln("Loading a new config file.")
+
 		content, err := ioutil.ReadFile(configFile)
 		if err != nil {
 			return updated, errors.New(err.Error())
 		}
+
 		err = json.Unmarshal(content, cfg)
 		if err != nil {
 			return updated, fmt.Errorf("config parsing failed: %w", err)
 		}
+
 		tmPollingInterval, err = time.ParseDuration(cfg.TmPollIntervalSeconds)
 		if err != nil {
 			return updated, errors.New("parsing TMPollingIntervalSeconds: " + err.Error())
 		}
+
 		if cfg.TOLoginDispersionFactor == 0 {
 			cfg.TOLoginDispersionFactor = DefaultTOLoginDispersionFactor
 		}
+
 		toRequestTimeout, err = time.ParseDuration(cfg.TORequestTimeOutSeconds)
 		if err != nil {
 			return updated, errors.New("parsing TORequestTimeOutSeconds: " + err.Error())
 		}
+
 		if cfg.ReasonCode != "active" && cfg.ReasonCode != "local" {
 			return updated, errors.New("invalid reason-code: " + cfg.ReasonCode + ", valid reason codes are 'active' or 'local'")
 		}
+
 		if cfg.TrafficServerConfigDir == "" {
 			cfg.TrafficServerConfigDir = DefaultTrafficServerConfigDir
 		}
+
 		if cfg.TrafficServerBinDir == "" {
 			cfg.TrafficServerBinDir = DefaultTrafficServerBinDir
 		}
+
 		if cfg.UnavailablePollThreshold == 0 {
 			cfg.UnavailablePollThreshold = DefaultUnavailablePollThreshold
 		}
+
 		if cfg.PollStateJSONLog == "" {
 			cfg.PollStateJSONLog = DefaultPollStateJSONLog
 		}
 
 		cfg.HealthClientConfigFile.LastModifyTime = modTime
 
+		// 設定ファイル中のto-credential-fileの値が空でない場合
 		if cfg.TOCredentialFile != "" {
 			cfg.CredentialFile.Filename = cfg.TOCredentialFile
 		}
 
 		// if tm-proxy-url is set in the config, verify the proxy
-		// url
+		// 設定ファイル中にtm-proxy-urlにプロキシのURLが指定されていたら
 		if cfg.TmProxyURL != "" {
+
 			if cfg.ParsedProxyURL, err = url.Parse(cfg.TmProxyURL); err != nil {
 				cfg.ParsedProxyURL = nil
 				return false, errors.New("parsing TmProxyUrl: " + err.Error())
 			}
+
 			if cfg.ParsedProxyURL.Port() == "" {
 				cfg.ParsedProxyURL = nil
 				return false, errors.New("TmProxyUrl invalid port specified")
 			}
+
 			log.Infof("TM queries will use the proxy: %s", cfg.TmProxyURL)
 		} else {
 			cfg.ParsedProxyURL = nil
 		}
+
 		updated = true
 	}
+
+	// updatedには設定値の読み込みが正常に完了したかどうかのbooleanが入ります
 	return updated, nil
+
 }
 
 func UpdateConfig(cfg *Cfg, newCfg *Cfg) {
