@@ -33,6 +33,7 @@ import (
 
 // GetConfigFile returns the text of the generated config file, the MIME Content Type of the config file, and any error.
 func GetConfigFile(toData *t3cutil.ConfigData, fileInfo atscfg.CfgMeta, hdrCommentTxt string, thiscfg config.Cfg) (string, string, bool, string, []string, error) {
+
 	start := time.Now()
 	defer func() {
 		log.Infof("GetConfigFile %v took %v\n", fileInfo.Name, time.Since(start).Round(time.Millisecond))
@@ -63,6 +64,7 @@ type ConfigFileLiteralFunc struct {
 }
 
 func getConfigFileFunc(fileName string) ConfigFileFunc {
+
 	for _, lf := range configFileLiteralFuncs {
 		if fileName == lf.Name {
 			return lf.Func
@@ -77,6 +79,7 @@ func getConfigFileFunc(fileName string) ConfigFileFunc {
 }
 
 var configFileLiteralFuncs = []ConfigFileLiteralFunc{
+
 	{"12M_facts", Make12MFacts},
 	{"50-ats.rules", MakeATSDotRules},
 	{"astats.config", MakeAstatsDotConfig},

@@ -30,10 +30,13 @@ type BGFetchDotConfigOpts struct {
 	HdrComment string
 }
 
+// background_fetch.soのconfigオプションに指定されるファイルを生成します
+// cf. https://docs.trafficserver.apache.org/en/7.1.x/admin-guide/plugins/background_fetch.en.html
 func MakeBGFetchDotConfig(
 	server *Server,
 	opt *BGFetchDotConfigOpts,
 ) (Cfg, error) {
+
 	if opt == nil {
 		opt = &BGFetchDotConfigOpts{}
 	}
@@ -43,6 +46,8 @@ func MakeBGFetchDotConfig(
 		return Cfg{}, makeErr(warnings, "server missing CDNName")
 	}
 
+	// background_fetchプラグインの設定ファイルに「include User-Agent *」を含める
+	// 記法参考: https://docs.trafficserver.apache.org/en/7.1.x/admin-guide/plugins/background_fetch.en.html
 	text := makeHdrComment(opt.HdrComment)
 	text += "include User-Agent *\n"
 

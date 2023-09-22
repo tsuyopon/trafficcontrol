@@ -54,9 +54,12 @@ const (
 )
 
 func runSysctl(cfg config.Cfg) {
+
+	// report-onlyオプションが指定された場合には何もしない
 	if cfg.ReportOnly {  //  --report-only=true
 		return
 	}
+
 	if cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart {  // --service-action=restart
 		_, rc, err := util.ExecCommand("/usr/sbin/sysctl", "-p")
 		if err != nil {
@@ -85,6 +88,7 @@ func main() {
 // Returns the application exit code.
 // t3c-applyは「t3c apply」コマンドから呼ばれます。
 func Main() int {
+
 	var syncdsUpdate torequest.UpdateStatus
 	var lock util.FileLock
 
@@ -101,11 +105,14 @@ func Main() int {
 	// /var/run/t3c.lockがあるかどうかでこのプロセスがロックされているかをチェックします。
 	log.Infoln("Trying to acquire app lock")
 	for lockStart := time.Now(); !lock.GetLock(LockFilePath); {
+
 		if time.Since(lockStart) > LockFileRetryTimeout {
 			log.Errorf("Failed to get app lock after %v seconds, another instance is running, exiting without running\n", int(LockFileRetryTimeout/time.Second))
 			log.Infoln(FailureExitMsg)
 			return ExitCodeAlreadyRunning
 		}
+
+		// 一定時間sleepする
 		time.Sleep(LockFileRetryInterval)
 	}
 	log.Infoln("Acquired app lock")
@@ -137,6 +144,7 @@ func Main() int {
 	trops := torequest.NewTrafficOpsReq(cfg)
 
 	// if doing os checks, insure there is a 'systemctl' or 'service' and 'chkconfig' commands.
+	//
 	// --skip-os-check=false かつ /bin/shの実行結果がSystemDやSystemVいずれでもないと判断した場合にはエラーログだけ出力させて処理を続行させる
 	if !cfg.SkipOSCheck && cfg.SvcManagement == config.Unknown {
 		log.Errorln("OS checks are enabled and unable to find any know service management tools.")

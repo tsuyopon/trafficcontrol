@@ -41,11 +41,16 @@ type StorageDotConfigOpts struct {
 
 // MakeStorageDotConfig creates storage.config for a given ATS Profile.
 // The paramData is the map of parameter names to values, for all parameters assigned to the given profile, with the config_file "storage.config".
+//
+// ATS Profile情報からstorage.configを生成する
+// cf. https://docs.trafficserver.apache.org/ja/9.2.x/admin-guide/files/storage.config.en.html
 func MakeStorageDotConfig(
+
 	server *Server,
 	serverParams []tc.Parameter,
 	opt *StorageDotConfigOpts,
 ) (Cfg, error) {
+
 	if opt == nil {
 		opt = &StorageDotConfigOpts{}
 	}
@@ -65,6 +70,8 @@ func MakeStorageDotConfig(
 	text := ""
 
 	nextVolume := 1
+
+	// Drive_Prefixが存在する場合
 	if drivePrefix := paramData["Drive_Prefix"]; drivePrefix != "" {
 		driveLetters := strings.TrimSpace(paramData["Drive_Letters"])
 		if driveLetters == "" {
@@ -74,6 +81,7 @@ func MakeStorageDotConfig(
 		nextVolume++
 	}
 
+	// RAM_Drive_Prefixが存在する場合
 	if ramDrivePrefix := paramData["RAM_Drive_Prefix"]; ramDrivePrefix != "" {
 		ramDriveLetters := strings.TrimSpace(paramData["RAM_Drive_Letters"])
 		if ramDriveLetters == "" {
@@ -83,6 +91,7 @@ func MakeStorageDotConfig(
 		nextVolume++
 	}
 
+	// SSD_Drive_Prefixが存在する場合
 	if ssdDrivePrefix := paramData["SSD_Drive_Prefix"]; ssdDrivePrefix != "" {
 		ssdDriveLetters := strings.TrimSpace(paramData["SSD_Drive_Letters"])
 		if ssdDriveLetters == "" {
@@ -92,9 +101,12 @@ func MakeStorageDotConfig(
 		nextVolume++
 	}
 
+	// 上記のDrive_Prefix, RAM_Drive_Prefix, SSD_Drive_Prefixのパラメータがいずれも指定されなかった場合、改行だけを送る
 	if text == "" {
 		text = "\n" // If no params exist, don't send "not found," but an empty file. We know the profile exists.
 	}
+
+	// textにヘッダコメントを追加する
 	hdr := makeHdrComment(opt.HdrComment)
 	text = hdr + text
 
@@ -107,6 +119,9 @@ func MakeStorageDotConfig(
 }
 
 func makeStorageVolumeText(prefix string, letters string, volume int) string {
+
+	// ここでstorage.configの行を生成します
+	// cf. https://docs.trafficserver.apache.org/ja/9.2.x/admin-guide/files/storage.config.en.html
 	text := ""
 	for _, letter := range strings.Split(letters, ",") {
 		letter = strings.TrimSpace(letter)
@@ -115,5 +130,6 @@ func makeStorageVolumeText(prefix string, letters string, volume int) string {
 		}
 		text += prefix + letter + " volume=" + strconv.Itoa(volume) + "\n"
 	}
+
 	return text
 }

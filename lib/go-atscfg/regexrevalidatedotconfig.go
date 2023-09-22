@@ -65,6 +65,7 @@ func MakeRegexRevalidateDotConfig(
 	jobs []InvalidationJob,
 	opt *RegexRevalidateDotConfigOpts,
 ) (Cfg, error) {
+
 	if opt == nil {
 		opt = &RegexRevalidateDotConfigOpts{}
 	}

@@ -36,15 +36,18 @@ type PluginDotConfigOpts struct {
 	HdrComment string
 }
 
+// plugin.configの生成
 func MakePluginDotConfig(
 	server *Server,
 	serverParams []tc.Parameter,
 	opt *PluginDotConfigOpts,
 ) (Cfg, error) {
+
 	if opt == nil {
 		opt = &PluginDotConfigOpts{}
 	}
 	warnings := []string{}
+
 	if len(server.ProfileNames) == 0 {
 		return Cfg{}, makeErr(warnings, "server missing profiles")
 	}

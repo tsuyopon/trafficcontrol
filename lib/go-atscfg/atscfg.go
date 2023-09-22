@@ -251,6 +251,7 @@ func genericProfileConfig(
 	paramData map[string]string, // GetProfileParamData(tx, profileID, fileName)
 	separator string,
 ) string {
+
 	text := ""
 
 	lines := []string{}

@@ -559,14 +559,17 @@ func (r *TrafficOpsReq) replaceCfgFile(cfg *ConfigFile) (*FileRestartData, error
 // CheckSystemServices is used to verify that packages installed
 // are enabled for startup.
 func (r *TrafficOpsReq) CheckSystemServices() error {
+
 	if r.Cfg.ServiceAction != t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart ではない場合
 		return nil
 	}
+
 	result, err := getChkconfig(r.Cfg) // t3c-request --get-data=chkconfig
 	if err != nil {
 		log.Errorln(err)
 		return err
 	}
+
 	for ii := range result {
 		name := result[ii]["name"]
 		value := result[ii]["value"]
@@ -589,27 +592,34 @@ func (r *TrafficOpsReq) CheckSystemServices() error {
 		// SystemDかSystemVかでsystemctlかchkconfigかのコマンドを分離する。
 		// systemctl enable <pkg> や chkconfig --level <level> <pkg> onのサービス開始コマンドを実行する
 		if r.Cfg.SvcManagement == config.SystemD {
+
 			out, rc, err := util.ExecCommand("/bin/systemctl", "enable", name)
 			if err != nil {
 				log.Errorf(string(out))
 				return errors.New("Unable to enable service " + name + ": " + err.Error())
 			}
+
 			if rc == 0 {
 				log.Infof("The %s service has been enabled\n", name)
 			}
+
 		} else if r.Cfg.SvcManagement == config.SystemV {
+
 			levelValue := strings.Join(level, "")
 			_, rc, err := util.ExecCommand("/bin/chkconfig", "--level", levelValue, name, "on")
 			if err != nil {
 				return errors.New("Unable to enable service " + name + ": " + err.Error())
 			}
+
 			if rc == 0 {
 				log.Infof("The %s service has been enabled\n", name)
 			}
+
 		} else {
 			log.Errorf("Unable to ensure %s service is enabled, SvcMananagement type is %s\n", name, r.Cfg.SvcManagement)
 		}
 	}
+
 	return nil
 }
 
@@ -629,12 +639,14 @@ func (r *TrafficOpsReq) IsPackageInstalled(name string) bool {
 		r.pkgs[name] = false
 		return false
 	}
+
 	if len(pkgArr) > 0 {
 		pkgAndVersion := pkgArr[0]
 		log.Infof("IsPackageInstalled '%v' found in rpm, adding '%v' to cache", name, pkgAndVersion)
 		r.pkgs[pkgAndVersion] = true
 		return true
 	}
+
 	log.Infof("IsPackageInstalled '%v' not found in rpm, adding '%v'=false to cache", name, name)
 	r.pkgs[name] = false
 	return false
@@ -649,6 +661,7 @@ func (r *TrafficOpsReq) GetConfigFile(name string) (*ConfigFile, bool) {
 // GetConfigFileList fetches and parses the multipart config files
 // for a cache from traffic ops and loads them into the configFiles map.
 func (r *TrafficOpsReq) GetConfigFileList() error {
+
 	var atsUid int = 0
 	var atsGid int = 0
 
@@ -658,11 +671,15 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 		log.Errorf("could not lookup the trafficserver, '%s', owner uid, using uid/gid 0",
 			config.TrafficServerOwner)
 	} else {
+
+		// uidをint型に変換する
 		atsUid, err = strconv.Atoi(atsUser.Uid)
 		if err != nil {
 			log.Errorf("could not parse the ats UID.")
 			atsUid = 0
 		}
+
+		// gidをint型に変換する
 		atsGid, err = strconv.Atoi(atsUser.Gid)
 		if err != nil {
 			log.Errorf("could not parse the ats GID.")
@@ -682,12 +699,14 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 
 	// generateで取得した情報を全てconfigFilesのオブジェクトにマッピングします。このオブジェクトはファイル名、パス、ファイル内容、Uid、Gid、パーミッション等を含みます。
 	for _, file := range allFiles {
+
 		if file.Secure {
 			mode = 0600
 		} else {
 			mode = 0644
 		}
 
+		// ファイル情報をConfigFile構造体に格納する
 		r.configFiles[file.Name] = &ConfigFile{
 			Name:     file.Name,
 			Path:     filepath.Join(file.Path, file.Name),
@@ -701,9 +720,13 @@ func (r *TrafficOpsReq) GetConfigFileList() error {
 
 		// warningがあれば登録しておく。ここはmainから最後にprintされる内容になります。
 		for _, warn := range file.Warnings {
+
+			// 警告がなければそのままcontinueする
 			if warn == "" {
 				continue
 			}
+
+			// 警告があればr.configFileWarningsに登録しておく
 			r.configFileWarnings[file.Name] = append(r.configFileWarnings[file.Name], warn)
 		}
 	}
@@ -965,9 +988,11 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 	// loop through the package list to build an install and uninstall list.
 	// t3c-request --get-data=packagesのレスポンスで取得したpkgsに対してrangeでイテレーションする
 	for ii := range pkgs {
+
 		var instpkg string // installed package
 		var reqpkg string  // required package
 		log.Infof("Processing package %s-%s\n", pkgs[ii].Name, pkgs[ii].Version)
+
 		// インストール済みパッケージかどうかをrpmコマンドで確認する。インストール済みならば戻り値のarrに格納される。
 		arr, err := util.PackageInfo("pkg-query", pkgs[ii].Name)
 		if err != nil {
@@ -984,7 +1009,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 		}
 
 		// check if the full package version is installed
-		//取得したパッケージ名とバージョンを合わせて変数名を構成する。この変数に入った<パッケージ>+<バージョン>の文字列の値と先ほどrpmで取得したインストール済みの文字列を比較することによって、インストールされているか、更新が必要かの判断を行う。
+		// 取得したパッケージ名とバージョンを合わせて変数名を構成する。この変数に入った<パッケージ>+<バージョン>の文字列の値と先ほどrpmで取得したインストール済みの文字列を比較することによって、インストールされているか、更新が必要かの判断を行う。
 		fullPackage := pkgs[ii].Name + "-" + pkgs[ii].Version
 
 		// --install-packages=trueの場合
@@ -996,6 +1021,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 				log.Infof("%s Currently installed and not marked for removal\n", reqpkg)
 				r.pkgs[fullPackage] = true
 				continue
+
 			} else if instpkg != "" { // the installed package needs upgrading.
 
 				// rpmで該当パッケージが取得できたが、TrafficOpsで取得したパッケージがバージョンも含めて一致しない場合には更新対象と判断する
@@ -1025,6 +1051,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 						uninstall = append(uninstall, arr[jj])
 					}
 				}
+
 			} else { 
 				// 「instpkg == ""」の場合にこのelseの分岐に入る。この場合にはシステムに該当パッケージがインストールされていないことを意味しているため、パッケージがインストール対象として追加される。
 				// the required package needs installing.
@@ -1032,6 +1059,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 				log.Errorf("%s is Not installed and is marked for installation.\n", fullPackage)
 				install = append(install, fullPackage)
 			}
+
 		} else { // --install-packages=falseの場合にはインストールはされない。ただログを出すだけ
 
 			// Only check if packages exist and complain if they are wrong.
@@ -1056,6 +1084,7 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 	if r.Cfg.ReportOnly {
 		log.Errorf("number of packages requiring installation: %d\n", len(install))
 	}
+
 	log.Debugf("number of packages requiring removal: %d\n", len(uninstall))
 	if r.Cfg.ReportOnly {
 		log.Errorf("number of packages requiring removal: %d\n", len(uninstall))
@@ -1092,8 +1121,10 @@ func (r *TrafficOpsReq) ProcessPackages() error {
 					log.Infof("Uninstalling %s\n", uninstall[jj])
 					r, err := util.PackageAction("remove", uninstall[jj]) // 指定されたパッケージのyum removeを実施する
 					if err != nil {
+						// パッケージのuninstallに失敗した場合
 						return errors.New("Unable to uninstall " + uninstall[jj] + " : " + err.Error())
 					} else if r == true {
+						// パッケージのuninstallに成功した場合
 						log.Infof("Package %s was uninstalled\n", uninstall[jj])
 					}
 				}
@@ -1205,13 +1236,15 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 		return errors.New("getting trafficserver service status: " + err.Error())
 	}
 
-	if r.Cfg.ReportOnly {
+	if r.Cfg.ReportOnly {  // --report-only=trueが指定された場合
+
 		if serviceNeeds == t3cutil.ServiceNeedsRestart {
 			log.Errorln("ATS configuration has changed.  The new config will be picked up the next time ATS is started.")
 		} else if serviceNeeds == t3cutil.ServiceNeedsReload {
 			log.Errorln("ATS configuration has changed. 'traffic_ctl config reload' needs to be run")
 		}
 		return nil
+
 	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagRestart { // --service-action=restart が指定されている場合
 
 		// デフォルトは「restart」
@@ -1232,10 +1265,13 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 		if *syncdsUpdate == UpdateTropsNeeded {
 			*syncdsUpdate = UpdateTropsSuccessful
 		}
+
 		return nil // we restarted, so no need to reload
 
 	} else if r.Cfg.ServiceAction == t3cutil.ApplyServiceActionFlagReload { // 「--service-action=reload」が指定された場合
+
 		if serviceNeeds == t3cutil.ServiceNeedsRestart {
+
 			// reload(--service-action=reload)オプションが指定しているにもかかわらず、サービスとしてはrestartを必要とする場合にはエラーログを吐いておく
 
 			// syncdsUpdate中の「UpdateTropsNeeded」の値は「UpdateTropsSuccessful」に変更する
@@ -1250,9 +1286,11 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 
 			// 「traffic_ctl config reload」が実行される
 			if _, _, err := util.ExecCommand(config.TSHome+config.TrafficCtl, "config", "reload"); err != nil {
+
 				if *syncdsUpdate == UpdateTropsNeeded {
 					*syncdsUpdate = UpdateTropsFailed
 				}
+
 				return errors.New("ATS configuration has changed and 'traffic_ctl config reload' failed, check ATS logs: " + err.Error())
 			}
 
@@ -1260,6 +1298,7 @@ func (r *TrafficOpsReq) StartServices(syncdsUpdate *UpdateStatus) error {
 			if *syncdsUpdate == UpdateTropsNeeded {
 				*syncdsUpdate = UpdateTropsSuccessful
 			}
+
 			log.Infoln("ATS 'traffic_ctl config reload' was successful")
 		}
 

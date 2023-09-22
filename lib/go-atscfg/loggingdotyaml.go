@@ -39,6 +39,7 @@ type LoggingDotYAMLOpts struct {
 	HdrComment string
 }
 
+// logging.yaml
 func MakeLoggingDotYAML(
 	server *Server,
 	serverParams []tc.Parameter,

@@ -137,6 +137,7 @@ func MakeParentDotConfig(
 	}, nil
 }
 
+// parent.configを生成する
 func makeParentDotConfigData(
 	dses []DeliveryService,
 	server *Server,
@@ -151,9 +152,11 @@ func makeParentDotConfigData(
 	cdn *tc.CDN,
 	opt *ParentConfigOpts,
 ) (*ParentAbstraction, []string, error) {
+
 	if opt == nil {
 		opt = &ParentConfigOpts{}
 	}
+
 	parentAbstraction := &ParentAbstraction{}
 	warnings := []string{}
 
@@ -177,10 +180,12 @@ func makeParentDotConfigData(
 	if err != nil {
 		return nil, warnings, errors.New("making CacheGroup map: " + err.Error())
 	}
+
 	serverParentCGData, err := getParentCacheGroupData(server, cacheGroups)
 	if err != nil {
 		return nil, warnings, errors.New("getting server parent cachegroup data: " + err.Error())
 	}
+
 	cacheIsTopLevel := isTopLevelCache(serverParentCGData)
 	serverCDNDomain := cdn.DomainName
 
@@ -400,6 +405,7 @@ func makeParentDotConfigData(
 			if isLastCacheTier := noTopologyServerIsLastCacheForDS(server, &ds); !isLastCacheTier {
 				orgFQDNStr = strings.Replace(orgFQDNStr, `https://`, `http://`, -1)
 			}
+
 			orgURI, orgWarns, err := getOriginURI(orgFQDNStr)
 			warnings = append(warnings, orgWarns...)
 			if err != nil {
@@ -453,6 +459,7 @@ func makeParentDotConfigData(
 				// textLine += "dest_domain=" + orgURI.Hostname() + " port=" + orgURI.Port() + " parent=" + *ds.OriginShield + " " + algorithm + " go_direct=true\n"
 
 			} else if ds.MultiSiteOrigin != nil && *ds.MultiSiteOrigin {
+
 				textLine.Comment = makeParentComment(opt.AddComments, *ds.XMLID, "")
 				textLine.DestDomain = orgURI.Hostname()
 				textLine.Port, err = strconv.Atoi(orgURI.Port())
@@ -513,6 +520,7 @@ func makeParentDotConfigData(
 			if isLastCacheTier := noTopologyServerIsLastCacheForDS(server, &ds); !isLastCacheTier {
 				orgFQDNStr = strings.Replace(orgFQDNStr, `https://`, `http://`, -1)
 			}
+
 			orgURI, orgWarns, err := getOriginURI(orgFQDNStr)
 			warnings = append(warnings, orgWarns...)
 			if err != nil {
@@ -561,20 +569,24 @@ func makeParentDotConfigData(
 					}
 
 				}
+
 				parentQStr := dsQSH
 				if parentQStr == nil {
 					v := false
 					parentQStr = &v
 				}
+
 				if ds.QStringIgnore != nil && tc.QStringIgnore(*ds.QStringIgnore) == tc.QStringIgnoreUseInCacheKeyAndPassUp && dsQSH == nil {
 					v := true
 					parentQStr = &v
 				}
+
 				if parentQStr == nil {
 					b := !DefaultIgnoreQueryStringInParentSelection
 					parentQStr = &b
 				}
 
+				// parent.config
 				text.DestDomain = orgURI.Hostname()
 				text.Port, err = strconv.Atoi(orgURI.Port())
 				if err != nil {
@@ -585,6 +597,7 @@ func makeParentDotConfigData(
 					}
 					warnings = append(warnings, "DS '"+*ds.XMLID+"' had malformed origin  port: '"+orgURI.Port()+"': using "+strconv.Itoa(text.Port)+"! : "+err.Error())
 				}
+
 				text.Parents = parents
 				text.SecondaryParents = secondaryParents
 				text.SecondaryMode = secondaryMode
@@ -1815,6 +1828,7 @@ func makeDSOrigins(dsses []DeliveryServiceServer, dses []DeliveryService, server
 
 // getProfileParentConfigParams returns a map[profileName][paramName]paramVal and any warnings
 func getProfileParentConfigParams(tcParentConfigParams []tc.Parameter) (map[string]map[string]string, []string) {
+
 	warnings := []string{}
 	parentConfigParamsWithProfiles, err := tcParamsToParamsWithProfiles(tcParentConfigParams)
 	if err != nil {

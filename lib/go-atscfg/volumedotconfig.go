@@ -39,11 +39,15 @@ type VolumeDotConfigOpts struct {
 
 // MakeVolumeDotConfig creates volume.config for a given ATS Profile.
 // The paramData is the map of parameter names to values, for all parameters assigned to the given profile, with the config_file "storage.config".
+//
+// ATS Profile で与えられた情報からvolume.configを生成します
 func MakeVolumeDotConfig(
+
 	server *Server,
 	serverParams []tc.Parameter,
 	opt *VolumeDotConfigOpts,
 ) (Cfg, error) {
+
 	if opt == nil {
 		opt = &VolumeDotConfigOpts{}
 	}
@@ -63,14 +67,18 @@ func MakeVolumeDotConfig(
 	hdr += "# TRAFFIC OPS NOTE: This is running with forced volumes - the size is irrelevant\n"
 	text := ""
 	nextVolume := 1
+
+	// Drive_Prefix, RAM_Drive_Prefix, SSD_Drive_Prefixで特に違いは何もなかった。
 	if drivePrefix := paramData["Drive_Prefix"]; drivePrefix != "" {
 		text += volumeText(strconv.Itoa(nextVolume), numVolumes)
 		nextVolume++
 	}
+
 	if ramDrivePrefix := paramData["RAM_Drive_Prefix"]; ramDrivePrefix != "" {
 		text += volumeText(strconv.Itoa(nextVolume), numVolumes)
 		nextVolume++
 	}
+
 	if ssdDrivePrefix := paramData["SSD_Drive_Prefix"]; ssdDrivePrefix != "" {
 		text += volumeText(strconv.Itoa(nextVolume), numVolumes)
 		nextVolume++
@@ -86,9 +94,13 @@ func MakeVolumeDotConfig(
 		LineComment: LineCommentVolumeDotConfig,
 		Warnings:    warnings,
 	}, nil
+
 }
 
 func volumeText(volume string, numVolumes int) string {
+
+	// volume.configのフォーマットに従ってvolume.configが生成される
+	// cf. https://docs.trafficserver.apache.org/ja/9.2.x/admin-guide/files/volume.config.en.html
 	return "volume=" + volume + " scheme=http size=" + strconv.Itoa(100/numVolumes) + "%\n"
 }
 

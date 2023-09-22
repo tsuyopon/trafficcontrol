@@ -159,6 +159,7 @@ func GetServiceStatus(name string) (ServiceStatus, int, error) {
 	} else if err != nil {
 		return SvcUnknown, pid, errors.New("could not get status for service '" + name + "'\n")
 	}
+
 	lines := strings.Split(string(output), "\n")
 	for ii := range lines {
 		line := strings.TrimSpace(lines[ii])
@@ -180,7 +181,9 @@ func GetServiceStatus(name string) (ServiceStatus, int, error) {
 // start or restart the service 'service'. cmd is 'start | restart'
 // GetServiceStatus関数でサービスの起動状態を判断した後に、「/usr/sbin/service <service> start|restart」を実行します。
 func ServiceStart(service string, cmd string) (bool, error) {
+
 	log.Infof("ServiceStart called for '%s'\n", service)
+
 	// 「/usr/sbin/serivce <name> status」によりその状態のサービスを取得する
 	svcStatus, pid, err := GetServiceStatus(service)
 	if err != nil {
@@ -198,8 +201,10 @@ func ServiceStart(service string, cmd string) (bool, error) {
 			return true, nil
 		}
 	}
+
 	// not started, service is already running
 	return false, nil
+
 }
 
 func WriteFileWithOwner(fn string, data []byte, uid *int, gid *int, perm os.FileMode) (int, error) {
