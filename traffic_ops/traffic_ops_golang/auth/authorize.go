@@ -81,6 +81,7 @@ func (cu CurrentUser) MissingPermissions(permissions ...string) []string {
 	return ret
 }
 
+// 「/api/3.0/login」などのエンドポイントでは認証のためにユーザー情報とそのパスワード情報をリクエスト時にボディとして受け付けます。
 type PasswordForm struct {
 	Username string `json:"u"`
 	Password string `json:"p"`

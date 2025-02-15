@@ -108,7 +108,12 @@ Subject: {{.InstanceName}} Password Reset Request` + "\r\n\r" + `
 </html>
 `))
 
+// 「/api/3.0/login」「/api/4.0/login」「/api/5.0/login」の際に呼ばれるエンドポイントです。
+// ユーザー情報とパスワード情報の認証を行い、下記の2つのCookieを発行します。
+//  - mojolicious
+//  - access_token
 func LoginHandler(db *sqlx.DB, cfg config.Config) http.HandlerFunc {
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		authenticated := false
@@ -134,7 +139,9 @@ func LoginHandler(db *sqlx.DB, cfg config.Config) http.HandlerFunc {
 		if err != nil {
 			log.Errorf("checking local user: %s\n", err.Error())
 		}
+
 		if userAllowed {
+
 			authenticated, err, blockingErr = auth.CheckLocalUserPassword(form, db, dbCtx)
 			if blockingErr != nil {
 				api.HandleErr(w, r, nil, http.StatusServiceUnavailable, nil, fmt.Errorf("error checking local user password: %s\n", blockingErr.Error()))
@@ -143,6 +150,7 @@ func LoginHandler(db *sqlx.DB, cfg config.Config) http.HandlerFunc {
 			if err != nil {
 				log.Errorf("checking local user password: %s\n", err.Error())
 			}
+
 			var ldapErr error
 			if !authenticated {
 				if cfg.LDAPEnabled {
@@ -152,6 +160,7 @@ func LoginHandler(db *sqlx.DB, cfg config.Config) http.HandlerFunc {
 					}
 				}
 			}
+
 			if authenticated {
 				httpCookie := tocookie.GetCookie(form.Username, defaultCookieDuration, cfg.Secrets[0])
 				http.SetCookie(w, httpCookie)

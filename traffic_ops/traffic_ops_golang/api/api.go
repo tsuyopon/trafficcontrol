@@ -1070,6 +1070,8 @@ func GetUserFromReq(w http.ResponseWriter, r *http.Request, secret string) (auth
 		// Authorizationヘッダ以外の認証方法の場合には、リクエスト中のCookieを確認する
 
 		for _, givenCookie := range r.Cookies() {
+
+			// 下記の変数の判定があるので、mojoliciousかaccess_tokenのどちらか先にチェックしたほうが採用される。
 			if cookie != nil {
 				break
 			}
@@ -1159,7 +1161,7 @@ func getCookieFromAccessToken(bearerToken string, secret string) (*http.Cookie, 
 
 	var cookie *http.Cookie
 
-	// JWTに含まれる署名をsecretで検証する
+	// JWTに含まれる署名をsecretで検証する(secretは起動時に引数で与えられる設定ファイル中にあります)
 	token, err := jwt.Parse([]byte(bearerToken), jwt.WithVerify(jwa.HS256, []byte(secret)))
 
 	// 署名検証失敗
